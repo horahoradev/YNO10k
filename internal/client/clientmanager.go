@@ -10,6 +10,11 @@ import (
 	"strings"
 )
 
+type ClientSockInfo struct {
+	ServiceType ServiceType
+	ClientInfo  *Client
+}
+
 type Client struct {
 	Name     string
 	Tripcode string
@@ -45,13 +50,18 @@ type GameClientInfo struct {
 	clientRemoteAddrMap map[string]*Client
 }
 
-func (cm *ClientManager) AddClientForRoom(serviceName string, conn gnet.Conn) error {
+func (cm *ClientManager) AddClientForRoom(serviceName string, conn gnet.Conn) (*ClientSockInfo, error) {
 	// TODO: cleanup old sock addr in clientRemoteAddrMap
 
 	// Split provided servicename into something we can use
 	gameName, roomName, err := cm.splitServiceName(serviceName)
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	serviceType, err := GetTypeFromRoomName(roomName)
+	if err != nil {
+		return nil, err
 	}
 
 	// Does the game client manager exist? if not, create
@@ -60,6 +70,12 @@ func (cm *ClientManager) AddClientForRoom(serviceName string, conn gnet.Conn) er
 		cm.gameClientMap[gameName] = GameClientInfo{
 			clientRoomRemoteAddrMap: make(map[string]map[string]*Client),
 		}
+	}
+
+	// Replace relevant socket (or just assign if need be)
+	err = cm.replaceClientSock(gameName, serviceName, roomName, conn)
+	if err != nil {
+		return nil, err
 	}
 
 	// Does the client info already exist somewhere? If so, move it
@@ -73,21 +89,20 @@ func (cm *ClientManager) AddClientForRoom(serviceName string, conn gnet.Conn) er
 		currRoom := k.RoomID
 		delete(gameServ.clientRoomRemoteAddrMap[currRoom], ip)
 		gameServ.clientRoomRemoteAddrMap[roomName][ip] = k
+		return &ClientSockInfo{
+			ClientInfo:  k,
+			ServiceType: serviceType,
+		}, nil
 
 	default:
 		c := newClient()
 		gameServ.clientRoomRemoteAddrMap[roomName][ip] = c
 		gameServ.clientRemoteAddrMap[ip] = c
+		return &ClientSockInfo{
+			ServiceType: serviceType,
+			ClientInfo:  c,
+		}, nil
 	}
-
-	err = cm.replaceClientSock(gameName, serviceName, conn)
-	if err != nil {
-		return err
-	}
-
-	k.RoomID = roomName
-
-	return nil
 }
 
 // Splits the service name into constituent parts
@@ -120,7 +135,7 @@ func (cm *ClientManager) RetrieveClientInfo(serviceName string, conn gnet.Conn) 
 	c, ok = gs.clientRemoteAddrMap[getIPFromConn(conn)]
 }
 
-func (cm *ClientManager) replaceClientSock(gameName, serviceType string, conn gnet.Conn) error {
+func (cm *ClientManager) replaceClientSock(gameName, serviceType, roomName string, conn gnet.Conn) error {
 	gs, ok := cm.gameClientMap[gameName]
 	if !ok {
 		return fmt.Errorf("Failed to retrieve game server while replacing client socket")
@@ -131,16 +146,21 @@ func (cm *ClientManager) replaceClientSock(gameName, serviceType string, conn gn
 		return fmt.Errorf("failed to retrieve client info while replacing client socket")
 	}
 
-	// FIXME
-	// This code block is a little sus, come back to later
-	switch {
-	case strings.HasPrefix(serviceType, "gchat"):
+	t, err := GetTypeFromRoomName(serviceType)
+	if err != nil {
+		return err
+	}
+
+	switch t {
+	case GlobalChat:
 		c.GlobalChatSocket.Close()
 		c.GlobalChatSocket = conn
-	case strings.HasPrefix(serviceType, "chat"):
+	case Chat:
 		c.RoomChatSocket.Close()
 		c.RoomChatSocket = conn
-	case strings.HasPrefix(serviceType, "game"):
+		// Change the local room ID as well
+		c.RoomID = roomName
+	case Game:
 		c.GameEventSocket.Close()
 		c.GameEventSocket = conn
 	default:
@@ -152,4 +172,30 @@ func (cm *ClientManager) replaceClientSock(gameName, serviceType string, conn gn
 
 func getIPFromConn(conn gnet.Conn) string {
 	return strings.Split(conn.RemoteAddr().String(), ":")[0]
+}
+
+type ServiceType string
+
+const (
+	GlobalChat ServiceType = "GlobalChat"
+	Chat       ServiceType = "Chat"
+	Game       ServiceType = "Game"
+	List       ServiceType = "List"
+)
+
+func GetTypeFromRoomName(roomname string) (ServiceType, error) {
+	// FIXME
+	// This code block is a little sus, come back to later
+	switch {
+	case strings.HasPrefix(roomname, "gchat"):
+		return GlobalChat, nil
+	case strings.HasPrefix(roomname, "chat"):
+		return Chat, nil
+	case strings.HasPrefix(roomname, "list"):
+		return List, nil
+	case strings.HasPrefix(roomname, "game"):
+		return Game, nil
+	default:
+		return "", fmt.Errorf("Invalid service type prefix in socket replacement: %s", roomname)
+	}
 }
