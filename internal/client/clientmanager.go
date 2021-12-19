@@ -32,17 +32,16 @@ func newClient() *Client {
 }
 
 type ClientManager struct {
-
 	// Game name : client info
 	gameClientMap map[string]GameClientInfo
+
+	// remote addr : client info
+	clientRemoteAddrMap map[string]*Client
 }
 
 type GameClientInfo struct {
 	// Room name: remote addr without port : client info
 	clientRoomRemoteAddrMap map[string]map[string]*Client
-
-	// remote addr : client info
-	clientRemoteAddrMap map[string]*Client
 }
 
 func (cm *ClientManager) AddClientForRoom(serviceName string, conn gnet.Conn) error {
@@ -57,14 +56,13 @@ func (cm *ClientManager) AddClientForRoom(serviceName string, conn gnet.Conn) er
 	if !ok {
 		cm.gameClientMap[gameName] = GameClientInfo{
 			clientRoomRemoteAddrMap: make(map[string]map[string]*Client),
-			clientRemoteAddrMap:     make(map[string]*Client),
 		}
 	}
 
 	// Does the client info already exist somewhere? If so, move it
 	// Otherwise, just add it
 	adr := conn.RemoteAddr().String()
-	k, ok := gameServ.clientRemoteAddrMap[adr]
+	k, ok := cm.clientRemoteAddrMap[adr]
 
 	switch ok {
 	case true:
@@ -95,14 +93,12 @@ func (cm *ClientManager) splitServiceName(serviceName string) (gameName, service
 	}
 }
 
-func (cm *ClientManager) replaceClientSock(gameName, serviceType string, conn gnet.Conn) error {
-	// This is a FIXME
-	gs, ok := cm.gameClientMap[gameName]
-	if !ok {
-		return fmt.Errorf("Failed to retrieve gs while replacing client socket")
-	}
+func (cm *ClientManager) retrieveClientInfo(conn gnet.Conn) (c *Client, ok bool) {
+	c, ok = cm.clientRemoteAddrMap[conn.RemoteAddr().String()]
+}
 
-	c, ok := gs.clientRemoteAddrMap[conn.RemoteAddr().String()]
+func (cm *ClientManager) replaceClientSock(gameName, serviceType string, conn gnet.Conn) error {
+	c, ok := cm.clientRemoteAddrMap[conn.RemoteAddr().String()]
 	if !ok {
 		return fmt.Errorf("failed to retrieve client info while replacing client socket")
 	}
