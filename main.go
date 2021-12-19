@@ -13,11 +13,10 @@ import (
 
 type AsyncWS struct {
 	gnet.Conn
-	uuid guuid.UUID
 }
 
 func (ws AsyncWS) Read(p []byte) (n int, err error) {
-	return ws.Read(p)
+	return ws.ReadN(p)
 }
 
 func newAsyncWS(c gnet.Conn) io.ReadWriter {
@@ -53,8 +52,8 @@ func (es *chatServer) React(frame []byte, c gnet.Conn) (out []byte, action gnet.
 
 	// Use ants pool to unblock the event-loop.
 	// This is a blocking thread pool, we don't want to loop infinitely and consume all workers
+	// Big downside to this approach: it's assumed that all messages will arrive in a single tcp packet
 	_ = es.pool.Submit(func() {
-
 		header, err := ws.ReadHeader(asyncWS)
 		if err != nil {
 			log.Errorf("Failed to upgrade websocket. Err: %s", err)
