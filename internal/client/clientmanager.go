@@ -5,6 +5,7 @@ import (
 	"fmt"
 	guuid "github.com/google/uuid"
 	"github.com/panjf2000/gnet"
+	log "github.com/sirupsen/logrus"
 	"regexp"
 	"strings"
 )
@@ -34,17 +35,19 @@ func newClient() *Client {
 type ClientManager struct {
 	// Game name : client info
 	gameClientMap map[string]GameClientInfo
-
-	// remote addr : client info
-	clientRemoteAddrMap map[string]*Client
 }
 
 type GameClientInfo struct {
 	// Room name: remote addr without port : client info
 	clientRoomRemoteAddrMap map[string]map[string]*Client
+
+	// remote addr without port: client info
+	clientRemoteAddrMap map[string]*Client
 }
 
 func (cm *ClientManager) AddClientForRoom(serviceName string, conn gnet.Conn) error {
+	// TODO: cleanup old sock addr in clientRemoteAddrMap
+
 	// Split provided servicename into something we can use
 	gameName, roomName, err := cm.splitServiceName(serviceName)
 	if err != nil {
@@ -61,21 +64,29 @@ func (cm *ClientManager) AddClientForRoom(serviceName string, conn gnet.Conn) er
 
 	// Does the client info already exist somewhere? If so, move it
 	// Otherwise, just add it
-	adr := conn.RemoteAddr().String()
-	k, ok := cm.clientRemoteAddrMap[adr]
+	ip := getIPFromConn(conn)
+	k, ok := gameServ.clientRemoteAddrMap[ip]
 
 	switch ok {
 	case true:
 		// Client already exists, so move it
 		currRoom := k.RoomID
-		delete(gameServ.clientRoomRemoteAddrMap[currRoom], adr)
-		gameServ.clientRoomRemoteAddrMap[roomName][adr] = k
+		delete(gameServ.clientRoomRemoteAddrMap[currRoom], ip)
+		gameServ.clientRoomRemoteAddrMap[roomName][ip] = k
 
 	default:
-		gameServ.clientRoomRemoteAddrMap[roomName][adr] = newClient()
+		c := newClient()
+		gameServ.clientRoomRemoteAddrMap[roomName][ip] = c
+		gameServ.clientRemoteAddrMap[ip] = c
+	}
+
+	err = cm.replaceClientSock(gameName, serviceName, conn)
+	if err != nil {
+		return err
 	}
 
 	k.RoomID = roomName
+
 	return nil
 }
 
@@ -93,12 +104,29 @@ func (cm *ClientManager) splitServiceName(serviceName string) (gameName, service
 	}
 }
 
-func (cm *ClientManager) retrieveClientInfo(conn gnet.Conn) (c *Client, ok bool) {
-	c, ok = cm.clientRemoteAddrMap[conn.RemoteAddr().String()]
+func (cm *ClientManager) RetrieveClientInfo(serviceName string, conn gnet.Conn) (c *Client, ok bool) {
+	// Split provided servicename into something we can use
+	gameName, _, err := cm.splitServiceName(serviceName)
+	if err != nil {
+		log.Errorf("Failed to split service name. Err: %s", err)
+		return nil, false
+	}
+
+	gs, ok := cm.gameClientMap[gameName]
+	if !ok {
+		return nil, ok
+	}
+
+	c, ok = gs.clientRemoteAddrMap[getIPFromConn(conn)]
 }
 
 func (cm *ClientManager) replaceClientSock(gameName, serviceType string, conn gnet.Conn) error {
-	c, ok := cm.clientRemoteAddrMap[conn.RemoteAddr().String()]
+	gs, ok := cm.gameClientMap[gameName]
+	if !ok {
+		return fmt.Errorf("Failed to retrieve game server while replacing client socket")
+	}
+
+	c, ok := gs.clientRemoteAddrMap[getIPFromConn(conn)]
 	if !ok {
 		return fmt.Errorf("failed to retrieve client info while replacing client socket")
 	}
@@ -118,4 +146,10 @@ func (cm *ClientManager) replaceClientSock(gameName, serviceType string, conn gn
 	default:
 		return fmt.Errorf("Invalid service type prefix in socket replacement: %s", serviceType)
 	}
+
+	return nil
+}
+
+func getIPFromConn(conn gnet.Conn) string {
+	return strings.Split(conn.RemoteAddr().String(), ":")[0]
 }

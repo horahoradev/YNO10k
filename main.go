@@ -50,6 +50,8 @@ func (es *chatServer) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
 func (es *chatServer) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
 	asyncWS := newAsyncWS(c)
 
+	c.SetContext()
+
 	// Use ants pool to unblock the event-loop.
 	// This is a blocking thread pool, we don't want to loop infinitely and consume all workers
 	// Big downside to this approach: it's assumed that all messages will arrive in a single tcp packet
