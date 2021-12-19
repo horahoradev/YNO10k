@@ -4,17 +4,16 @@ import (
 	"github.com/panjf2000/gnet"
 	"github.com/panjf2000/gnet/pkg/pool/goroutine"
 
+	log "github.com/sirupsen/logrus"
 	"io"
-	"log"
-	"net"
-	"time"
 
 	"github.com/gobwas/ws"
-	"github.com/gobwas/ws/wsutil"
+	guuid "github.com/google/uuid"
 )
 
 type AsyncWS struct {
 	gnet.Conn
+	uuid guuid.UUID
 }
 
 func (ws AsyncWS) Read(p []byte) (n int, err error) {
@@ -24,6 +23,7 @@ func (ws AsyncWS) Read(p []byte) (n int, err error) {
 func newAsyncWS(c gnet.Conn) io.ReadWriter {
 	return AsyncWS{
 		Conn: c,
+		uuid: guuid.New(),
 	}
 }
 
@@ -36,27 +36,53 @@ type chatServer struct {
 	pool *goroutine.Pool
 }
 
-func (es *chatServer) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
+func (es *chatServer) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
 	asyncWS := newAsyncWS(c)
-
 	_, err := ws.Upgrade(asyncWS)
 	if err != nil {
 		log.Errorf("Failed to upgrade websocket. Err: %s", err)
 		return
 	}
 
-	header, err := ws.ReadHeader(asyncWS)
-	if err != nil {
-		log.Errorf("Failed to upgrade websocket. Err: %s", err)
-		return
-	}
+	return
+}
 
-	data := append([]byte{}, frame...)
+// Shouldn't be called until after we upgrade the websocket, so this is safe
+func (es *chatServer) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
+	asyncWS := newAsyncWS(c)
 
 	// Use ants pool to unblock the event-loop.
+	// This is a blocking thread pool, we don't want to loop infinitely and consume all workers
 	_ = es.pool.Submit(func() {
-		time.Sleep(1 * time.Second)
-		c.AsyncWrite(data)
+
+		header, err := ws.ReadHeader(asyncWS)
+		if err != nil {
+			log.Errorf("Failed to upgrade websocket. Err: %s", err)
+			return
+		}
+
+		payload := make([]byte, header.Length)
+		_, err = io.ReadFull(asyncWS, payload)
+		if err != nil {
+			log.Errorf("Failed to read full message. Err: %s", err)
+			return
+		}
+
+		// We're using the input header, FIXME
+		if err := ws.WriteHeader(asyncWS, header); err != nil {
+			log.Errorf("Failed to write response header. Err: %s", err)
+			return
+		}
+
+		if _, err := asyncWS.Write(payload); err != nil {
+			log.Errorf("Failed to write response payload. Err: %s", err)
+			return
+		}
+
+		if header.OpCode == ws.OpClose {
+			c.Close()
+			return
+		}
 	})
 
 	return
@@ -66,36 +92,8 @@ func main() {
 	p := goroutine.Default()
 	defer p.Release()
 
-	echo := &chatServer{pool: p}
+	echo := &chatServer{
+		pool: p,
+	}
 	log.Fatal(gnet.Serve(echo, "tcp://:9000", gnet.WithMulticore(true)))
 }
-
-/*
-func main() {
-	http.ListenAndServe(":8080", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Upgrade to a websocket
-		conn, _, _, err := ws.UpgradeHTTP(r, w)
-		if err != nil {
-			log.Errorf("Failed to upgrade to websocket. Err: %s", err)
-			return
-		}
-		go func() {
-			defer conn.Close()
-
-			for {
-				msg, op, err := wsutil.ReadClientData(conn)
-				if err != nil {
-					// handle error
-				}
-				err = wsutil.WriteServerMessage(conn, op, msg)
-				if err != nil {
-					// handle error
-				}
-			}
-		}()
-	}))
-}
-
-func muxMessage(msg)
-
-*/
