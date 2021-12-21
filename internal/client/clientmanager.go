@@ -1,11 +1,9 @@
 package client
 
 import (
-	"errors"
 	"fmt"
 	guuid "github.com/google/uuid"
 	"github.com/panjf2000/gnet"
-	log "github.com/sirupsen/logrus"
 	"regexp"
 	"strings"
 )
@@ -37,7 +35,7 @@ func newClient() *Client {
 	}
 }
 
-type ClientManager struct {
+type ClientPubsubManager struct {
 	// Game name : client info
 	gameClientMap map[string]GameClientInfo
 }
@@ -50,7 +48,7 @@ type GameClientInfo struct {
 	clientRemoteAddrMap map[string]*Client
 }
 
-func (cm *ClientManager) AddClientForRoom(serviceName string, conn gnet.Conn) (*ClientSockInfo, error) {
+func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gnet.Conn) (*ClientSockInfo, error) {
 	// TODO: cleanup old sock addr in clientRemoteAddrMap
 
 	// Split provided servicename into something we can use
@@ -59,7 +57,7 @@ func (cm *ClientManager) AddClientForRoom(serviceName string, conn gnet.Conn) (*
 		return nil, err
 	}
 
-	serviceType, err := GetTypeFromRoomName(roomName)
+	serviceType, err := getTypeFromRoomName(roomName)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +104,7 @@ func (cm *ClientManager) AddClientForRoom(serviceName string, conn gnet.Conn) (*
 }
 
 // Splits the service name into constituent parts
-func (cm *ClientManager) splitServiceName(serviceName string) (gameName, serviceType string, err error) {
+func (cm *ClientPubsubManager) splitServiceName(serviceName string) (gameName, serviceType string, err error) {
 	validID := regexp.MustCompile(`^([a-zA-Z\d]*)(gchat|game|chat\d*)\z`)
 	rs := validID.FindStringSubmatch(serviceName)
 
@@ -119,23 +117,23 @@ func (cm *ClientManager) splitServiceName(serviceName string) (gameName, service
 	}
 }
 
-func (cm *ClientManager) RetrieveClientInfo(serviceName string, conn gnet.Conn) (c *Client, ok bool) {
-	// Split provided servicename into something we can use
-	gameName, _, err := cm.splitServiceName(serviceName)
-	if err != nil {
-		log.Errorf("Failed to split service name. Err: %s", err)
-		return nil, false
-	}
+//func (cm *ClientPubsubManager) RetrieveClientInfo(serviceName string, conn gnet.Conn) (c *Client, ok bool) {
+//	// Split provided servicename into something we can use
+//	gameName, _, err := cm.splitServiceName(serviceName)
+//	if err != nil {
+//		log.Errorf("Failed to split service name. Err: %s", err)
+//		return nil, false
+//	}
+//
+//	gs, ok := cm.gameClientMap[gameName]
+//	if !ok {
+//		return nil, ok
+//	}
+//
+//	c, ok = gs.clientRemoteAddrMap[getIPFromConn(conn)]
+//}
 
-	gs, ok := cm.gameClientMap[gameName]
-	if !ok {
-		return nil, ok
-	}
-
-	c, ok = gs.clientRemoteAddrMap[getIPFromConn(conn)]
-}
-
-func (cm *ClientManager) replaceClientSock(gameName, serviceType, roomName string, conn gnet.Conn) error {
+func (cm *ClientPubsubManager) replaceClientSock(gameName, serviceType, roomName string, conn gnet.Conn) error {
 	gs, ok := cm.gameClientMap[gameName]
 	if !ok {
 		return fmt.Errorf("Failed to retrieve game server while replacing client socket")
@@ -146,7 +144,7 @@ func (cm *ClientManager) replaceClientSock(gameName, serviceType, roomName strin
 		return fmt.Errorf("failed to retrieve client info while replacing client socket")
 	}
 
-	t, err := GetTypeFromRoomName(serviceType)
+	t, err := getTypeFromRoomName(serviceType)
 	if err != nil {
 		return err
 	}
@@ -183,7 +181,7 @@ const (
 	List       ServiceType = "List"
 )
 
-func GetTypeFromRoomName(roomname string) (ServiceType, error) {
+func getTypeFromRoomName(roomname string) (ServiceType, error) {
 	// FIXME
 	// This code block is a little sus, come back to later
 	switch {

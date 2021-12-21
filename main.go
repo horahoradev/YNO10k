@@ -35,11 +35,9 @@ func (ws AsyncWS) Write(p []byte) (n int, err error) {
 type messageServer struct {
 	*gnet.EventServer
 	pool *goroutine.Pool
-	cm   *client.ClientManager
+	cm   *client.ClientPubsubManager
 
-	chatHandler *msghandler.ChatHandler
-	gameHandler *msghandler.GameHandler
-	listHandler *msghandler.ListHandler
+	serviceMux msghandler.Handler
 }
 
 func (es *messageServer) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
@@ -56,18 +54,6 @@ func (es *messageServer) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) 
 // Shouldn't be called until after we upgrade the websocket, so this is safe
 func (ms *messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
 	asyncWS := newAsyncWS(c)
-
-	var clientInfo *client.ClientSockInfo
-	ctx := c.Context()
-	if ctx != nil {
-		var ok bool
-		clientInfo, ok = ctx.(*client.ClientSockInfo)
-		if !ok {
-			log.Errorf("Failed to typecast context to client")
-			c.Close()
-			return
-		}
-	}
 
 	// Use ants pool to unblock the event-loop.
 	// This is a blocking thread pool, we don't want to loop infinitely and consume all workers
@@ -86,57 +72,14 @@ func (ms *messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gn
 			return
 		}
 
-		switch {
-		case clientInfo == nil:
-			// This is the servicename packet, use it to initialize the client info
-			clientInfo, err := ms.cm.AddClientForRoom(string(clientPayload), c)
-			if err != nil {
-				log.Errorf("Failed to add client for room. Err: %s", err)
-			}
-
-			// Store the client info with the connection
-			c.SetContext(clientInfo)
-
-		default:
-			// We've already received the service packet, so this is regular message
-			switch clientInfo.ServiceType {
-			case client.GlobalChat, client.Chat:
-				err = ms.chatHandler.HandleMessage(clientPayload)
-				if err != nil {
-					log.Errorf("chat handler failed to handle message: %s", err)
-					return
-				}
-			case client.Game:
-				err = ms.gameHandler.HandleMessage(clientPayload)
-				if err != nil {
-					log.Errorf("game handler failed to handle message: %s", err)
-					return
-				}
-			case client.List:
-				err = ms.listHandler.HandleMessage(clientPayload)
-				if err != nil {
-					log.Errorf("list handler failed to handle message: %s", err)
-					return
-				}
-			default:
-				log.Errorf("Could not handle message, client socket servicetype was not set")
-			}
-		}
-
-		//// We're using the input header, FIXME
-		//if err := ws.WriteHeader(asyncWS, header); err != nil {
-		//	log.Errorf("Failed to write response header. Err: %s", err)
-		//	return
-		//}
-
-		//if _, err := asyncWS.Write(payload); err != nil {
-		//	log.Errorf("Failed to write response payload. Err: %s", err)
-		//	return
-		//}
-
 		if header.OpCode == ws.OpClose {
 			c.Close()
 			return
+		}
+
+		err = ms.serviceMux.HandleMessage(clientPayload, c)
+		if err != nil {
+			log.Errorf("Could not handle client message. Err: %s", err)
 		}
 	})
 

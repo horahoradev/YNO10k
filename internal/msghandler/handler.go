@@ -1,5 +1,7 @@
 package msghandler
 
-type handler interface {
-	func HandleMessage([]byte) error
+import "github.com/panjf2000/gnet"
+
+type Handler interface {
+	HandleMessage([]byte, gnet.Conn) error
 }
