@@ -3,12 +3,9 @@ package protocol
 import (
 	"errors"
 	"fmt"
-	"log"
 	"reflect"
 	"strconv"
 	"strings"
-
-	"github.com/divan/num2words"
 )
 
 /*
@@ -26,7 +23,7 @@ func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
 	e := reflect.ValueOf(target).Elem()
 
 	t := e.Type()
-	log.Print(t)
+
 	// Determine match prefix for target struct
 	pref, ok := t.FieldByName("MatchPrefix")
 	if !ok {
@@ -58,18 +55,25 @@ func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
 	for i := 1; i < len(spl); i++ {
 		arg := spl[i]
 
-		numWord := strings.Title(num2words.Convert(i))
-		f := e.FieldByName(numWord)
-		zeroVal := reflect.Value{}
-		if f == zeroVal {
-			return false, fmt.Errorf("Missing required struct field %s", numWord)
+		f := e.FieldByIndex([]int{i})
+
+		ft := t.FieldByIndex([]int{i})
+		fieldName := ft.Name
+
+		tagsVal, ok := ft.Tag.Lookup("ynoproto")
+		if !ok {
+			return false, fmt.Errorf("Failed to retrieve ynoproto tag for field %s", fieldName)
 		}
+
+		// MUST be comma delimited
+		tags := strings.Split(tagsVal, ",")
+
 		if !f.IsValid() {
-			return false, fmt.Errorf("field %s is not valid", numWord)
+			return false, fmt.Errorf("field %d is not valid", i)
 		}
 
 		if !f.CanSet() {
-			return false, fmt.Errorf("could not set field %s", numWord)
+			return false, fmt.Errorf("could not set field %d", i)
 		}
 
 		switch f.Kind() {
@@ -81,6 +85,14 @@ func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
 
 			if f.OverflowInt(int64(n)) {
 				return false, fmt.Errorf("provided value, %d, would overflow if assigned to struct type", n)
+			}
+
+			for _, tag := range tags {
+				if tag == "nonnegative" {
+					if n < 0 {
+						return false, fmt.Errorf("message value, %d, for field %s violates nonnegative annotation", n, fieldName)
+					}
+				}
 			}
 
 			f.SetInt(int64(n))
