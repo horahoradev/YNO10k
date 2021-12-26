@@ -32,8 +32,8 @@ func TestMarshal(t *testing.T) {
 			Yval:        -2,
 		},
 		{
-			fmtString:   "%s\uffff-%s\uffff-%s",
-			errExpected: errors.New("message value, -2, for field Y violates nonnegative annotation"),
+			fmtString:   "%s\uffff-%s\uffff%s",
+			errExpected: nil,
 			Xval:        -1,
 			Yval:        2,
 		},
@@ -46,6 +46,10 @@ func TestMarshal(t *testing.T) {
 		w := wow{}
 
 		matched, err := Marshal(testMsg, &w)
+		if test.errExpected == nil && err != nil {
+			t.Fatalf("Received unexpected error")
+		}
+
 		if err != nil && err.Error() != test.errExpected.Error() {
 			t.Fatalf("Did not get expected error: %s", err)
 		}
@@ -55,7 +59,7 @@ func TestMarshal(t *testing.T) {
 		}
 
 		// No guarantees on contents if we returned an error
-		if err == nil && !(w.X == 1 && w.Y == 2) {
+		if err == nil && !(w.X == test.Xval && w.Y == test.Yval) {
 			t.Fatalf("Parse error")
 		}
 
