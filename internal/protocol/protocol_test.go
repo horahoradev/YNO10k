@@ -8,6 +8,7 @@ type wow struct {
 	MatchPrefix uint8  `ynoproto:"FF"`
 	X           uint16 `ynoproto:"nonempty"`
 	Y           uint16 `ynoproto:"nonnegative"`
+	Z           string
 }
 
 func TestMarshal(t *testing.T) {
@@ -17,20 +18,23 @@ func TestMarshal(t *testing.T) {
 		match       bool
 		Xval        uint16
 		Yval        uint16
+		Zval        string
 	}{
 		{
-			payload:     []byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
+			payload:     []byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x57, 0x4F, 0x57},
 			errExpected: nil,
 			match:       true,
 			Xval:        0xFFFF,
 			Yval:        0xFFFF,
+			Zval:        "WOW",
 		},
 		{
-			payload:     []byte{0xFE, 0xFF, 0xFF, 0xFF, 0xFF},
+			payload:     []byte{0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0x57, 0x4F, 0x57},
 			errExpected: nil,
 			match:       false,
 			Xval:        0xFFFF,
 			Yval:        0xFFFF,
+			Zval:        "WOW",
 		},
 	}
 
@@ -54,7 +58,7 @@ func TestMarshal(t *testing.T) {
 		}
 
 		// No guarantees on contents if we returned an error
-		if err == nil && matched && !(w.X == test.Xval && w.Y == test.Yval) {
+		if err == nil && matched && !(w.X == test.Xval && w.Y == test.Yval && w.Z == test.Zval) {
 			t.Fatalf("Parse error for payload %d", i)
 		}
 

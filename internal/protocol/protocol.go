@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"reflect"
 )
 
@@ -49,7 +48,6 @@ func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
 
 	// This doesn't indicate an error; it just didn't match.
 	if msgVal[0] != msgbuf[0] {
-		log.Printf("%s %s", msgPrefix, string(msgbuf[0]))
 		return false, nil
 	}
 
