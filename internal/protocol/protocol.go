@@ -1,11 +1,12 @@
 package protocol
 
 import (
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
-	"strconv"
-	"strings"
 )
 
 /*
@@ -16,8 +17,6 @@ import (
 		Two int `ynoproto:"nonnegative"`
 	}
 */
-
-var delimChar string = "\uffff"
 
 func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
 	e := reflect.ValueOf(target).Elem()
@@ -30,10 +29,8 @@ func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
 		return false, errors.New("target missing required attribute MatchPrefix")
 	}
 
-	spl := strings.Split(string(msgbuf), delimChar)
-
-	if len(spl) == 0 {
-		return false, errors.New("empty message")
+	if len(msgbuf) == 0 {
+		return false, errors.New("Empty message")
 	}
 
 	msgPrefix, ok := pref.Tag.Lookup("ynoproto")
@@ -41,68 +38,72 @@ func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
 		return false, errors.New("Missing required MatchPrefix annotation ynoproto")
 	}
 
+	msgVal, err := hex.DecodeString(msgPrefix)
+	if err != nil {
+		return false, errors.New("Failed to decode matchprefix to hex")
+	}
+
+	if len(msgVal) != 1 {
+		return false, fmt.Errorf("msgVal has an incorrect length of %d", len(msgVal))
+	}
+
 	// This doesn't indicate an error; it just didn't match.
-	if msgPrefix != spl[0] {
+	if msgVal[0] != msgbuf[0] {
+		log.Printf("%s %s", msgPrefix, string(msgbuf[0]))
 		return false, nil
 	}
 
-	// The message needs to match the target's number of fields
-	// e.g. if we get m, it better have two fields
-	if t.NumField() != len(spl) {
-		return false, fmt.Errorf("target's number of fields, %d, does not match message's number of fields, %d", t.NumField(), len(spl))
-	}
-
-	for i := 1; i < len(spl); i++ {
-		arg := spl[i]
-
-		f := e.FieldByIndex([]int{i})
-
-		ft := t.FieldByIndex([]int{i})
+	hasString := false
+	totalFieldSize := 1
+	// Start at 1 byte offset due to prefix
+	for i, attrNum := 1, 1; i < len(msgbuf) && attrNum < t.NumField(); attrNum++ {
+		f := e.FieldByIndex([]int{attrNum})
+		ft := t.FieldByIndex([]int{attrNum})
+		fieldSize := ft.Type.Size()
+		totalFieldSize += int(fieldSize)
 		fieldName := ft.Name
 
-		tagsVal, ok := ft.Tag.Lookup("ynoproto")
-		if !ok {
-			return false, fmt.Errorf("Failed to retrieve ynoproto tag for field %s", fieldName)
-		}
+		// tagsVal, ok := ft.Tag.Lookup("ynoproto")
+		// if !ok {
+		// 	return false, fmt.Errorf("Failed to retrieve ynoproto tag for field %s", fieldName)
+		// }
 
 		// MUST be comma delimited
-		tags := strings.Split(tagsVal, ",")
+		// tags := strings.Split(tagsVal, ",")
 
 		if !f.IsValid() {
-			return false, fmt.Errorf("field %d is not valid", i)
+			return false, fmt.Errorf("field %s is not valid", fieldName)
 		}
 
 		if !f.CanSet() {
-			return false, fmt.Errorf("could not set field %d", i)
+			return false, fmt.Errorf("could not set field %s", fieldName)
 		}
 
 		switch f.Kind() {
-		case reflect.Int:
-			n, err := strconv.Atoi(arg)
-			if err != nil {
-				return false, fmt.Errorf("Failed to convert arg to int. Err: %s", err)
-			}
+		case reflect.Uint16:
+			n := binary.BigEndian.Uint16(msgbuf[i:])
 
-			if f.OverflowInt(int64(n)) {
+			// Not sure if this is really valid for uint16
+			if f.OverflowUint(uint64(n)) {
 				return false, fmt.Errorf("provided value, %d, would overflow if assigned to struct type", n)
 			}
 
-			for _, tag := range tags {
-				if tag == "nonnegative" {
-					if n < 0 {
-						return false, fmt.Errorf("message value, %d, for field %s violates nonnegative annotation", n, fieldName)
-					}
-				}
-			}
-
-			f.SetInt(int64(n))
+			f.SetUint(uint64(n))
 
 		case reflect.String:
-			f.SetString(arg)
+			hasString = true
+			f.SetString(string(msgbuf[i:]))
 
 		default:
 			return false, errors.New("Unsupported type used in struct")
 		}
+
+		i += int(fieldSize)
+	}
+
+	// Can't use the reflected size of the struct because of word allignment padding
+	if !hasString && uint64(totalFieldSize) != uint64(len(msgbuf)) {
+		return false, fmt.Errorf("struct size %d did not match len of msgbuf %d", totalFieldSize, len(msgbuf))
 	}
 
 	return true, nil
