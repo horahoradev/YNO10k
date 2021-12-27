@@ -63,14 +63,6 @@ func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
 		totalFieldSize += int(fieldSize)
 		fieldName := ft.Name
 
-		// tagsVal, ok := ft.Tag.Lookup("ynoproto")
-		// if !ok {
-		// 	return false, fmt.Errorf("Failed to retrieve ynoproto tag for field %s", fieldName)
-		// }
-
-		// MUST be comma delimited
-		// tags := strings.Split(tagsVal, ",")
-
 		if !f.IsValid() {
 			return false, fmt.Errorf("field %s is not valid", fieldName)
 		}
@@ -101,7 +93,7 @@ func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
 		i += int(fieldSize)
 	}
 
-	// Can't use the reflected size of the struct because of word allignment padding
+	// Can't use the reflected size of the struct because of word alignment padding
 	if !hasString && uint64(totalFieldSize) != uint64(len(msgbuf)) {
 		return false, fmt.Errorf("struct size %d did not match len of msgbuf %d", totalFieldSize, len(msgbuf))
 	}
