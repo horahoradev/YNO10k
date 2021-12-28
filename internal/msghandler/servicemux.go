@@ -3,6 +3,7 @@ package msghandler
 import (
 	"errors"
 	"fmt"
+
 	"github.com/horahoradev/YNO10k/internal/client"
 	"github.com/panjf2000/gnet"
 	log "github.com/sirupsen/logrus"
@@ -47,17 +48,17 @@ func (sm *ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn) error {
 		// We've already received the service packet, so this is regular message
 		switch clientInfo.ServiceType {
 		case client.GlobalChat, client.Chat:
-			err := sm.ch.HandleMessage(clientPayload, c)
+			err := sm.ch.HandleMessage(clientPayload, c, clientInfo)
 			if err != nil {
 				return fmt.Errorf("chat handler failed to handle message: %s", err)
 			}
 		case client.Game:
-			err := sm.gh.HandleMessage(clientPayload, c)
+			err := sm.gh.HandleMessage(clientPayload, c, clientInfo)
 			if err != nil {
 				return fmt.Errorf("game handler failed to handle message: %s", err)
 			}
 		case client.List:
-			err := sm.lh.HandleMessage(clientPayload, c)
+			err := sm.lh.HandleMessage(clientPayload, c, clientInfo)
 			if err != nil {
 				return fmt.Errorf("list handler failed to handle message: %s", err)
 			}

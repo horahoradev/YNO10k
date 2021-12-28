@@ -1,7 +1,10 @@
 package msghandler
 
-import "github.com/panjf2000/gnet"
+import (
+	"github.com/horahoradev/YNO10k/internal/client"
+	"github.com/panjf2000/gnet"
+)
 
 type Handler interface {
-	HandleMessage([]byte, gnet.Conn) error
+	HandleMessage([]byte, gnet.Conn, *client.ClientSockInfo) error
 }
