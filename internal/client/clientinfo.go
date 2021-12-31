@@ -8,7 +8,7 @@ import (
 type Client struct {
 	Name     string
 	Tripcode string
-	UUID     string
+	UUID     guuid.UUID
 	RoomID   string
 
 	// O(N) for search but list will be small and cache friendly

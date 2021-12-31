@@ -30,3 +30,13 @@ type IgnoreGameEvents struct {
 	MatchPrefix string `ynoproto:"3"`
 	IgnoredUUID string
 }
+
+type SetUsername struct {
+	MatchPrefix string `ynoproto:"4"`
+	Username    string
+}
+
+type SendMessage struct {
+	MatchPrefix string `ynoproto:"5"`
+	Message     string
+}
