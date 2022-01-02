@@ -6,7 +6,8 @@ import (
 )
 
 type ClientSockInfo struct {
-	ServiceType ServiceType
+	ServiceType serviceType
+	GameName    string
 	ClientInfo  *Client
 	SyncObject  *SyncObject
 }

@@ -1,9 +1,13 @@
 package client
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
+
+	"log"
 
 	guuid "github.com/google/uuid"
 	"github.com/panjf2000/gnet"
@@ -64,24 +68,18 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 
 	switch ok {
 	case true:
-		// Client already exists, so move it
-		currRoom := k.RoomID
-		delete(gameServ.clientRoomRemoteAddrMap[currRoom], ip)
-		gameServ.clientRoomRemoteAddrMap[roomName][ip] = k
-		return &ClientSockInfo{
-			ClientInfo:  k,
-			ServiceType: serviceType,
-		}, nil
-
+		k = newClient()
 	default:
-		c := newClient()
-		gameServ.clientRoomRemoteAddrMap[roomName][ip] = c
-		gameServ.clientRemoteAddrMap[ip] = c
-		return &ClientSockInfo{
-			ServiceType: serviceType,
-			ClientInfo:  c,
-		}, nil
+		// do nothing
 	}
+
+	// Deletion in old room will be handled in an async worker
+	gameServ.clientRoomRemoteAddrMap[roomName][ip] = k
+	return &ClientSockInfo{
+		ClientInfo:  k,
+		ServiceType: serviceType,
+		GameName:    gameName,
+	}, nil
 }
 
 // Splits the service name into constituent parts
@@ -114,13 +112,67 @@ func (cm *ClientPubsubManager) splitServiceName(serviceName string) (gameName, s
 //	c, ok = gs.clientRemoteAddrMap[getIPFromConn(conn)]
 //}
 
+func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo ClientSockInfo, broadcastType ServiceType) error {
+	clients, ok := cm.gameClientMap[sockinfo.GameName]
+	if !ok {
+		return fmt.Errorf("Failed to broadcast, could not find clients for game name %s", sockinfo.GameName)
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	roomName := ""
+	switch broadcastType {
+	case GlobalChat:
+		roomName = "gchat"
+	case Chat:
+		roomName = sockinfo.ClientInfo.ChatRoomID
+	case Game:
+		roomName = sockinfo.ClientInfo.GameRoomID
+	default:
+		return errors.New("Invalid broadcast type provided")
+	}
+
+OUTER:
+	for _, client := range clients.clientRoomRemoteAddrMap[roomName] {
+		// If the target is the sender
+		if client.UUID == sockinfo.ClientInfo.UUID {
+			continue
+		}
+
+		// Handle ignores
+		var ignores []guuid.UUID
+		switch broadcastType {
+		case GlobalChat, Chat:
+			ignores = sockinfo.ClientInfo.ChatIgnores
+		case Game:
+			ignores = sockinfo.ClientInfo.GameIgnores
+		}
+
+		for _, ignoredUUID := range ignores {
+			if client.UUID == ignoredUUID {
+				continue OUTER
+			}
+		}
+
+		err = client.GlobalChatSocket.AsyncWrite(payloadBytes)
+		if err != nil {
+			log.Errorf("Failed to async write global chat message. Err: %s. Continuing...", err)
+		}
+	}
+}
+
 func (cm *ClientPubsubManager) replaceClientSock(gameName, serviceType, roomName string, conn gnet.Conn) error {
 	gs, ok := cm.gameClientMap[gameName]
 	if !ok {
 		return fmt.Errorf("Failed to retrieve game server while replacing client socket")
 	}
 
-	c, ok := gs.clientRemoteAddrMap[getIPFromConn(conn)]
+	clientIP := getIPFromConn(conn)
+
+	c, ok := gs.clientRemoteAddrMap[clientIP]
 	if !ok {
 		return fmt.Errorf("failed to retrieve client info while replacing client socket")
 	}
@@ -132,16 +184,22 @@ func (cm *ClientPubsubManager) replaceClientSock(gameName, serviceType, roomName
 
 	switch t {
 	case GlobalChat:
-		c.GlobalChatSocket.Close()
+		if c.GlobalChatSocket != nil {
+			c.GlobalChatSocket.Close()
+		}
 		c.GlobalChatSocket = conn
 	case Chat:
-		c.RoomChatSocket.Close()
+		if c.RoomChatSocket != nil {
+			c.RoomChatSocket.Close()
+		}
 		c.RoomChatSocket = conn
-		// Change the local room ID as well
-		c.RoomID = roomName
+		c.ChatRoomID = roomName
 	case Game:
-		c.GameEventSocket.Close()
+		if c.GameEventSocket != nil {
+			c.GameEventSocket.Close()
+		}
 		c.GameEventSocket = conn
+		c.GameRoomID = roomName
 	default:
 		return fmt.Errorf("Invalid service type prefix in socket replacement: %s", serviceType)
 	}

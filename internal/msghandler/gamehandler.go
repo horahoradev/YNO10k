@@ -27,8 +27,8 @@ const (
 )
 
 type GameHandler struct {
-	pubsubManager   client.PubSubManager
-	syncobjFlushMap map[string]*client.SyncObject
+	pubsubManager    client.PubSubManager
+	sockinfoFlushMap map[string]*client.ClientSockInfo
 }
 
 func (ch *GameHandler) HandleMessage(payload []byte, c gnet.Conn, s *client.ClientSockInfo) error {
@@ -75,15 +75,15 @@ func (ch *GameHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 
 func (ch *GameHandler) flushWorker() error {
 	for true {
-		for key, so := range ch.syncobjFlushMap {
-			flushedSO := so.GetFlushedChanges()
-			err := ch.pubsubManager.Broadcast(flushedSO)
+		for key, si := range ch.sockinfoFlushMap {
+			flushedSO := si.SyncObject.GetFlushedChanges()
+			err := ch.pubsubManager.Broadcast(flushedSO, si)
 			// TODO: include uuid in argument to broadcast so we can ignore the sending player
 			// Also include room to publish to
 			if err != nil {
 				log.Errorf("Received error when broadcasting SO: %s", err)
 			} else {
-				delete(ch.syncobjFlushMap, key)
+				delete(ch.sockinfoFlushMap, key)
 			}
 		}
 	}

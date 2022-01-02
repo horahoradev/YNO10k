@@ -9,7 +9,10 @@ type Client struct {
 	Name     string
 	Tripcode string
 	UUID     guuid.UUID
-	RoomID   string
+
+	// Roughly the same for chat and game events
+	ChatRoomID string
+	GameRoomID string
 
 	// O(N) for search but list will be small and cache friendly
 	GameIgnores []guuid.UUID
