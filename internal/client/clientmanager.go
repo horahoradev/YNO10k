@@ -2,31 +2,12 @@ package client
 
 import (
 	"fmt"
-	guuid "github.com/google/uuid"
-	"github.com/panjf2000/gnet"
 	"regexp"
 	"strings"
+
+	guuid "github.com/google/uuid"
+	"github.com/panjf2000/gnet"
 )
-
-type ClientSockInfo struct {
-	ServiceType ServiceType
-	ClientInfo  *Client
-}
-
-type Client struct {
-	Name     string
-	Tripcode string
-	UUID     string
-	RoomID   string
-
-	// O(N) for search but list will be small and cache friendly
-	GameIgnores []guuid.UUID
-	ChatIgnores []guuid.UUID
-
-	GameEventSocket  gnet.Conn
-	RoomChatSocket   gnet.Conn
-	GlobalChatSocket gnet.Conn
-}
 
 func newClient() *Client {
 	return &Client{
@@ -105,7 +86,7 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 
 // Splits the service name into constituent parts
 func (cm *ClientPubsubManager) splitServiceName(serviceName string) (gameName, serviceType string, err error) {
-	validID := regexp.MustCompile(`^([a-zA-Z\d]*)(gchat|game|chat\d*)\z`)
+	validID := regexp.MustCompile(`^([a-zA-Z\d]*)(gchat|game\d*|chat\d*)\z`)
 	rs := validID.FindStringSubmatch(serviceName)
 
 	switch {

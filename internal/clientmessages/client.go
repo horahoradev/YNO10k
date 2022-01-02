@@ -40,3 +40,30 @@ type SendMessage struct {
 	MatchPrefix string `ynoproto:"5"`
 	Message     string
 }
+
+/*
+const (
+	movement = iota + 1
+	sprite
+	sound
+	weather
+	name
+	movementAnimationSpeed
+	variable
+	switchsync
+	animtype
+	facing
+	typingstatus
+	syncme // Deprecated
+)
+*/
+
+// uint16 packet type, uint16 X, uint16_t Y
+type Movement struct {
+	MatchPrefix string `ynoproto:"1"`
+	X           uint16
+	Y           uint16
+}
+
+// TODOS:
+// 1. Change packet type length to uint8

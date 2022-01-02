@@ -48,7 +48,6 @@ func (ch *ChatHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 		return ch.setUsername(payload, s)
 	case userMessage:
 		return ch.sendUserMessage(payload, s)
-
 	default:
 		return fmt.Errorf("Received unknown message %s", payload[0])
 	}
@@ -128,8 +127,6 @@ func (ch *ChatHandler) setUsername(payload []byte, client *client.ClientSockInfo
 		Message:     fmt.Sprintf("%s#%s has connected to the channel", t.Username, guuid.String()),
 	})
 }
-
-// 					Broadcast(socket, JSON.stringify({type: "userMessage", text: msgjson.text, name: socket.name, trip: socket.trip}));
 
 func (ch *ChatHandler) sendUserMessage(payload []byte, client *client.ClientSockInfo) error {
 	t := clientmessages.SendMessage{}

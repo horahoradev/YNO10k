@@ -8,6 +8,7 @@ import (
 type ClientSockInfo struct {
 	ServiceType ServiceType
 	ClientInfo  *Client
+	SyncObject  *SyncObject
 }
 
 // Not idempotent
