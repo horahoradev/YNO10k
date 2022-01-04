@@ -117,10 +117,10 @@ func (ch *ChatHandler) setUsername(payload []byte, client *client.ClientSockInfo
 		return err
 	}
 
-	guuid := guuid.New()
+	// guuid := guuid.New()
 
 	client.ClientInfo.Name = t.Username
-	client.ClientInfo.UUID = guuid
+	// client.ClientInfo.UUID = guuid
 
 	return ch.pm.Broadcast(servermessages.ServerMessage{
 		MessageType: "server",
