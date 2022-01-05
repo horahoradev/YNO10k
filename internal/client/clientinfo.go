@@ -13,9 +13,15 @@ type ClientID struct {
 	Conn gnet.Conn
 }
 
+func (cid *ClientID) GetAddr() net.Addr {
+	return cid.Conn.RemoteAddr()
+}
+
 type Client interface {
 	Ignore(net.Addr)
+	Unignore(net.Addr)
 	Send(payload []byte, sender net.Addr) error
+	GetAddr() net.Addr
 }
 
 type GameClient struct {
@@ -57,10 +63,7 @@ func (gc *ChatClient) Ignore(ipv4 net.Addr) {
 }
 
 func (gc *ChatClient) Send(payload []byte, sender net.Addr) error {
-	// If the sender is the current user, just return
-	if gc.ClientID.Conn.RemoteAddr().String() == sender.String() {
-		return nil
-	}
+	// If the sender is the current user, we want to receive it anyway
 
 	// is the sender ignored? If so, return without an error
 	for _, ignoredAddr := range gc.ChatIgnores {

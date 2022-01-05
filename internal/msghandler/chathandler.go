@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	guuid "github.com/google/uuid"
 	"github.com/horahoradev/YNO10k/internal/client"
 	"github.com/horahoradev/YNO10k/internal/clientmessages"
 	"github.com/horahoradev/YNO10k/internal/messages"
@@ -95,7 +94,7 @@ func (ch *ChatHandler) ignoreChat(payload []byte, client *client.ClientSockInfo)
 }
 
 func (ch *ChatHandler) ignoreGame(payload []byte, client *client.ClientSockInfo) error {
-	t := messages.IgnoreGameEvents{}
+	t := clientmessages.IgnoreGameEvents{}
 	matched, err := protocol.Marshal(payload, &t)
 	switch {
 	case !matched:
@@ -104,7 +103,12 @@ func (ch *ChatHandler) ignoreGame(payload []byte, client *client.ClientSockInfo)
 		return err
 	}
 
-	return client.IgnoreGameEvents(t)
+	user, err := ch.pm.GetUsernameForGame(client.GameName, t.IgnoredUsername)
+	if err != nil {
+		return err
+	}
+	
+	return client.ClientInfo.Ignore(user.ClientInfo.GetAddr())
 }
 
 func (ch *ChatHandler) setUsername(payload []byte, client *client.ClientSockInfo) error {
@@ -117,14 +121,11 @@ func (ch *ChatHandler) setUsername(payload []byte, client *client.ClientSockInfo
 		return err
 	}
 
-	// guuid := guuid.New()
-
 	client.ClientInfo.Name = t.Username
-	// client.ClientInfo.UUID = guuid
 
 	return ch.pm.Broadcast(servermessages.ServerMessage{
 		MessageType: "server",
-		Message:     fmt.Sprintf("%s#%s has connected to the channel", t.Username, guuid.String()),
+		Message:     fmt.Sprintf("%s#%s has connected to the channel", t.Username}, client),
 	})
 }
 
@@ -146,5 +147,5 @@ func (ch *ChatHandler) sendUserMessage(payload []byte, client *client.ClientSock
 		Text: t.Message,
 		Name: client.ClientInfo.Name,
 		Trip: client.ClientInfo.UUID.String(),
-	})
+	}, client)
 }

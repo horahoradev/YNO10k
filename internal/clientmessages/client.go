@@ -12,23 +12,23 @@ const (
 */
 
 type UnignoreChatEvents struct {
-	MatchPrefix   string `ynoproto:"0"`
-	UnignoredUUID string
+	MatchPrefix       string `ynoproto:"0"`
+	UnignoredUsername string
 }
 
 type UnignoreGameEvents struct {
-	MatchPrefix   string `ynoproto:"1"`
-	UnignoredUUID string
+	MatchPrefix       string `ynoproto:"1"`
+	UnignoredUsername string
 }
 
 type IgnoreChatEvents struct {
-	MatchPrefix string `ynoproto:"2"`
-	IgnoredUUID string
+	MatchPrefix     string `ynoproto:"2"`
+	IgnoredUsername string
 }
 
 type IgnoreGameEvents struct {
-	MatchPrefix string `ynoproto:"3"`
-	IgnoredUUID string
+	MatchPrefix     string `ynoproto:"3"`
+	IgnoredUsername string
 }
 
 type SetUsername struct {

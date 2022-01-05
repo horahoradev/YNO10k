@@ -2,14 +2,10 @@ package client
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 
-	"log"
-
-	guuid "github.com/google/uuid"
 	"github.com/panjf2000/gnet"
 )
 
@@ -21,7 +17,7 @@ type ClientPubsubManager struct {
 
 type GameClientInfo struct {
 	// Room name: remote addr without port : client info
-	clientRoomRemoteAddrMap map[string][]]Client
+	clientRoomRemoteAddrMap map[string][]Client
 }
 
 func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gnet.Conn) (*ClientSockInfo, error) {
@@ -59,6 +55,7 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 		ClientInfo:  client,
 		ServiceType: serviceType,
 		GameName:    gameName,
+		RoomName:    roomName,
 	}, nil
 }
 
@@ -77,56 +74,30 @@ func (cm *ClientPubsubManager) splitServiceName(serviceName string) (gameName, s
 }
 
 // TODO: refactor here too
-func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo ClientSockInfo, broadcastType ServiceType) error {
-	clients, ok := cm.gameClientMap[sockinfo.GameName]
-	if !ok {
-		return fmt.Errorf("Failed to broadcast, could not find clients for game name %s", sockinfo.GameName)
-	}
-
+func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo ClientSockInfo) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 
-	roomName := ""
-	switch broadcastType {
-	case GlobalChat:
-		roomName = "gchat"
-	case Chat:
-		roomName = sockinfo.ClientInfo.ChatRoomID
-	case Game:
-		roomName = sockinfo.ClientInfo.GameRoomID
-	default:
-		return errors.New("Invalid broadcast type provided")
+	gameClientInfo, ok := cm.gameClientMap[sockinfo.GameName]
+	if !ok {
+		return fmt.Errorf("Failed to broadcast, could not find game client info for game name %s", sockinfo.GameName)
 	}
 
-OUTER:
-	for _, client := range clients.clientRoomRemoteAddrMap[roomName] {
-		// If the target is the sender
-		if client.UUID == sockinfo.ClientInfo.UUID {
-			continue
-		}
+	clients, ok := gameClientInfo.clientRoomRemoteAddrMap[sockinfo.RoomName]
+	if !ok {
+		return fmt.Errorf("Failed to broadcast, could not fiknd client list for room name %s", sockinfo.RoomName)
+	}
 
-		// Handle ignores
-		var ignores []guuid.UUID
-		switch broadcastType {
-		case GlobalChat, Chat:
-			ignores = sockinfo.ClientInfo.ChatIgnores
-		case Game:
-			ignores = sockinfo.ClientInfo.GameIgnores
-		}
-
-		for _, ignoredUUID := range ignores {
-			if client.UUID == ignoredUUID {
-				continue OUTER
-			}
-		}
-
-		err = client.GlobalChatSocket.AsyncWrite(payloadBytes)
+	for _, client := range clients {
+		err = client.Send(payloadBytes, sockinfo.ClientInfo.GetAddr())
 		if err != nil {
-			log.Errorf("Failed to async write global chat message. Err: %s. Continuing...", err)
+			log.Errorf("Failed to send to client. Err: %s. Continuing...", err)
 		}
 	}
+
+	return nil
 }
 
 func getIPFromConn(conn gnet.Conn) string {
