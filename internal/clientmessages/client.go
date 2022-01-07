@@ -34,6 +34,7 @@ type IgnoreGameEvents struct {
 type SetUsername struct {
 	MatchPrefix string `ynoproto:"4"`
 	Username    string
+	Tripcode    string
 }
 
 type SendMessage struct {

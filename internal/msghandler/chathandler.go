@@ -10,6 +10,7 @@ import (
 	"github.com/horahoradev/YNO10k/internal/protocol"
 	"github.com/horahoradev/YNO10k/internal/servermessages"
 	"github.com/panjf2000/gnet"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -37,12 +38,15 @@ func (ch *ChatHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 	switch payload[0] {
 	case pardonChat:
 		return ch.pardonChat(payload, s)
-	case pardonGame:
-		return ch.pardonGame(payload, s)
 	case ignoreChat:
 		return ch.ignoreChat(payload, s)
+	case pardonGame:
+		// Unimplemented for now, will require a hack with my modeling
+		log.Errorf("Received pardonGame and couldn't handle")
+		// return ch.pardonGame(payload, s)
 	case ignoreGame:
-		return ch.ignoreGame(payload, s)
+		log.Errorf("Received ignoreGame and couldn't handle")
+		// return ch.ignoreGame(payload, s)
 	case setUsername:
 		return ch.setUsername(payload, s)
 	case userMessage:
@@ -55,7 +59,7 @@ func (ch *ChatHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 }
 
 func (ch *ChatHandler) pardonChat(payload []byte, client *client.ClientSockInfo) error {
-	t := messages.UnignoreChatEvents{}
+	t := clientmessages.UnignoreChatEvents{}
 	matched, err := protocol.Marshal(payload, &t)
 	switch {
 	case !matched:
@@ -64,21 +68,27 @@ func (ch *ChatHandler) pardonChat(payload []byte, client *client.ClientSockInfo)
 		return err
 	}
 
-	return client.UnignoreChatEvents(t)
-}
-
-func (ch *ChatHandler) pardonGame(payload []byte, client *client.ClientSockInfo) error {
-	t := messages.UnignoreGameEvents{}
-	matched, err := protocol.Marshal(payload, &t)
-	switch {
-	case !matched:
-		return errors.New("Failed to match")
-	case err != nil:
+	user, err := ch.pm.GetUsernameForGame(client.GameName, t.UnignoredUsername)
+	if err != nil {
 		return err
 	}
 
-	return client.UnignoreGameEvents(t)
+	client.ClientInfo.Unignore(user.ClientInfo.GetAddr())
+	return nil
 }
+
+// func (ch *ChatHandler) pardonGame(payload []byte, client *client.ClientSockInfo) error {
+// 	t := messages.UnignoreGameEvents{}
+// 	matched, err := protocol.Marshal(payload, &t)
+// 	switch {
+// 	case !matched:
+// 		return errors.New("Failed to match")
+// 	case err != nil:
+// 		return err
+// 	}
+
+// 	return client.UnignoreGameEvents(t)
+// }
 
 func (ch *ChatHandler) ignoreChat(payload []byte, client *client.ClientSockInfo) error {
 	t := messages.IgnoreChatEvents{}
@@ -90,26 +100,33 @@ func (ch *ChatHandler) ignoreChat(payload []byte, client *client.ClientSockInfo)
 		return err
 	}
 
-	return client.IgnoreChatEvents(t)
-}
-
-func (ch *ChatHandler) ignoreGame(payload []byte, client *client.ClientSockInfo) error {
-	t := clientmessages.IgnoreGameEvents{}
-	matched, err := protocol.Marshal(payload, &t)
-	switch {
-	case !matched:
-		return errors.New("Failed to match")
-	case err != nil:
-		return err
-	}
-
-	user, err := ch.pm.GetUsernameForGame(client.GameName, t.IgnoredUsername)
+	user, err := ch.pm.GetUsernameForGame(client.GameName, t.UnignoredUsername)
 	if err != nil {
 		return err
 	}
-	
-	return client.ClientInfo.Ignore(user.ClientInfo.GetAddr())
+
+	client.ClientInfo.Ignore(user.ClientInfo.GetAddr())
+
+	return nil
 }
+
+// func (ch *ChatHandler) ignoreGame(payload []byte, client *client.ClientSockInfo) error {
+// 	t := clientmessages.IgnoreGameEvents{}
+// 	matched, err := protocol.Marshal(payload, &t)
+// 	switch {
+// 	case !matched:
+// 		return errors.New("Failed to match")
+// 	case err != nil:
+// 		return err
+// 	}
+
+// 	user, err := ch.pm.GetUsernameForGame(client.GameName, t.IgnoredUsername)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	return client.ClientInfo.Ignore(user.ClientInfo.GetAddr())
+// }
 
 func (ch *ChatHandler) setUsername(payload []byte, client *client.ClientSockInfo) error {
 	t := clientmessages.SetUsername{}
@@ -121,12 +138,13 @@ func (ch *ChatHandler) setUsername(payload []byte, client *client.ClientSockInfo
 		return err
 	}
 
-	client.ClientInfo.Name = t.Username
+	client.ClientInfo.Setusername(t.Username)
+	client.ClientInfo.SetTrip(t.Tripcode)
 
 	return ch.pm.Broadcast(servermessages.ServerMessage{
 		MessageType: "server",
-		Message:     fmt.Sprintf("%s#%s has connected to the channel", t.Username}, client),
-	})
+		Message:     fmt.Sprintf("%s#%s has connected to the channel", t.Username, client),
+	}, client)
 }
 
 func (ch *ChatHandler) sendUserMessage(payload []byte, client *client.ClientSockInfo) error {
@@ -139,13 +157,13 @@ func (ch *ChatHandler) sendUserMessage(payload []byte, client *client.ClientSock
 		return err
 	}
 
-	if client.ClientInfo.Name == "" {
+	if client.ClientInfo.GetUsername() == "" {
 		return errors.New("name not set, cannot send message")
 	}
 
 	return ch.pm.Broadcast(servermessages.UserMessage{
 		Text: t.Message,
-		Name: client.ClientInfo.Name,
-		Trip: client.ClientInfo.UUID.String(),
+		Name: client.ClientInfo.GetUsername(),
+		Trip: client.ClientInfo.GetTrip(),
 	}, client)
 }
