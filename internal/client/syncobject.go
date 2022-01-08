@@ -1,5 +1,7 @@
 package client
 
+import guuid "github.com/google/uuid"
+
 type Position struct {
 	X uint16
 	Y uint16
@@ -37,8 +39,9 @@ type SyncObject struct {
 	typingStatusChanged bool
 }
 
-func NewSyncObject(uuid string) *SyncObject {
-	return &SyncObject{UID: uuid}
+func NewSyncObject() *SyncObject {
+	uuid := guuid.New()
+	return &SyncObject{UID: uuid.String()}
 }
 
 func (so *SyncObject) SetPos(x, y uint16) {

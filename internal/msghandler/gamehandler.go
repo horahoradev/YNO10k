@@ -3,6 +3,7 @@ package msghandler
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/horahoradev/YNO10k/internal/client"
 	"github.com/horahoradev/YNO10k/internal/clientmessages"
@@ -21,6 +22,7 @@ const (
 	variable
 	switchsync
 	animtype
+	animFrame
 	facing
 	typingstatus
 	syncme // Deprecated
@@ -74,12 +76,14 @@ func (ch *GameHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 }
 
 func (ch *GameHandler) flushWorker() error {
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+
 	for true {
+		<-timer.C
 		for key, si := range ch.sockinfoFlushMap {
 			flushedSO := si.SyncObject.GetFlushedChanges()
 			err := ch.pubsubManager.Broadcast(flushedSO, si)
-			// TODO: include uuid in argument to broadcast so we can ignore the sending player
-			// Also include room to publish to
 			if err != nil {
 				log.Errorf("Received error when broadcasting SO: %s", err)
 			} else {
@@ -94,12 +98,27 @@ func (ch *GameHandler) handleMovement(payload []byte, c *client.ClientSockInfo) 
 	matched, err := protocol.Marshal(payload, &t)
 	switch {
 	case !matched:
-		return errors.New("Failed to match")
+		return errors.New("Failed to match in handleMovement")
 	case err != nil:
 		return err
 	}
 
 	c.SyncObject.SetPos(t.X, t.Y)
-	ch.syncobjFlushMap[c.SyncObject.UID] = c.SyncObject
+	ch.sockinfoFlushMap[c.SyncObject.UID] = c
+	return nil
+}
+
+func (ch *GameHandler) handleSprite(payload []byte, c *client.ClientSockInfo) error {
+	t := clientmessage.{}
+	matched, err := protocol.Marshal(payload, &t)
+	switch {
+	case !matched:
+		return errors.New("Failed to match in handleSprite")
+	case err != nil:
+		return err
+	}
+
+	c.SyncObject.SetPos(t.X, t.Y)
+	ch.sockinfoFlushMap[c.SyncObject.UID] = c
 	return nil
 }
