@@ -73,7 +73,7 @@ type Movement struct {
 type Sprite struct {
 	MatchPrefix string `ynoproto:"2"`
 	SpriteID    uint16
-	Spritesheet string
+	Spritesheet uint32
 }
 
 //uint16 packet type, uint16 volume, uint16 tempo, uint16 balance, string sound file
@@ -131,11 +131,11 @@ type AnimFrame struct {
 }
 
 type Facing struct {
-	MatchPrefix string `ynoproto:"8"`
+	MatchPrefix string `ynoproto:"9"`
 	Facing      uint16
 }
 
 type TypingStatus struct {
-	MatchPrefix  string `ynoproto:"9"`
+	MatchPrefix  string `ynoproto:"10"`
 	TypingStatus uint16
 }
