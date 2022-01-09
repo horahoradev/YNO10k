@@ -6,11 +6,11 @@ import (
 	"github.com/panjf2000/gnet"
 	"github.com/panjf2000/gnet/pkg/pool/goroutine"
 
-	log "github.com/sirupsen/logrus"
 	"io"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/gobwas/ws"
-	guuid "github.com/google/uuid"
 )
 
 type AsyncWS struct {
@@ -18,13 +18,13 @@ type AsyncWS struct {
 }
 
 func (ws AsyncWS) Read(p []byte) (n int, err error) {
-	return ws.ReadN(p)
+	p = ws.Conn.Read()
+	return len(p), nil
 }
 
 func newAsyncWS(c gnet.Conn) io.ReadWriter {
 	return AsyncWS{
 		Conn: c,
-		uuid: guuid.New(),
 	}
 }
 
@@ -34,13 +34,25 @@ func (ws AsyncWS) Write(p []byte) (n int, err error) {
 
 type messageServer struct {
 	*gnet.EventServer
-	pool *goroutine.Pool
-	cm   *client.ClientPubsubManager
-
+	pool       *goroutine.Pool
 	serviceMux msghandler.Handler
 }
 
-func (es *messageServer) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
+func newMessageServer(pool *goroutine.Pool) messageServer {
+	ps := client.NewClientPubsubManager()
+
+	lh := msghandler.NewListHandler()
+	ch := msghandler.NewChatHandler(ps)
+	gh := msghandler.NewGameHandler(ps)
+	sMux := msghandler.NewServiceMux(gh, ch, lh, ps)
+	return messageServer{
+		serviceMux:  sMux,
+		pool:        pool,
+		EventServer: &gnet.EventServer{},
+	}
+}
+
+func (es messageServer) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
 	asyncWS := newAsyncWS(c)
 	_, err := ws.Upgrade(asyncWS)
 	if err != nil {
@@ -52,7 +64,7 @@ func (es *messageServer) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) 
 }
 
 // Shouldn't be called until after we upgrade the websocket, so this is safe
-func (ms *messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
+func (ms messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
 	asyncWS := newAsyncWS(c)
 
 	// Use ants pool to unblock the event-loop.
@@ -77,7 +89,7 @@ func (ms *messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gn
 			return
 		}
 
-		err = ms.serviceMux.HandleMessage(clientPayload, c)
+		err = ms.serviceMux.HandleMessage(clientPayload, c, nil)
 		if err != nil {
 			log.Errorf("Could not handle client message. Err: %s", err)
 		}
@@ -90,8 +102,6 @@ func main() {
 	p := goroutine.Default()
 	defer p.Release()
 
-	echo := &messageServer{
-		pool: p,
-	}
-	log.Fatal(gnet.Serve(echo, "tcp://:9000", gnet.WithMulticore(true)))
+	mServ := newMessageServer(p)
+	log.Fatal(gnet.Serve(mServ, "tcp://:9000", gnet.WithMulticore(true)))
 }

@@ -2,7 +2,6 @@ package msghandler
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/horahoradev/YNO10k/internal/client"
 	"github.com/panjf2000/gnet"
@@ -18,7 +17,16 @@ type ServiceMux struct {
 	lh Handler
 }
 
-func (sm *ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn) error {
+func NewServiceMux(gh, ch, lh Handler, cm client.PubSubManager) ServiceMux {
+	return ServiceMux{
+		cm: cm,
+		gh: gh,
+		ch: ch,
+		lh: lh,
+	}
+}
+
+func (sm ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *client.ClientSockInfo) error {
 	// Do we have existing context? Then it's a normal message
 	var clientInfo *client.ClientSockInfo
 	ctx := c.Context()
@@ -43,27 +51,19 @@ func (sm *ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn) error {
 
 		// Store the client info with the connection
 		c.SetContext(clientInfo)
+		return nil
 
 	default:
 		// We've already received the service packet, so this is regular message
 		switch clientInfo.ServiceType {
 		case client.GlobalChat, client.Chat:
-			err := sm.ch.HandleMessage(clientPayload, c, clientInfo)
-			if err != nil {
-				return fmt.Errorf("chat handler failed to handle message: %s", err)
-			}
+			return sm.ch.HandleMessage(clientPayload, c, clientInfo)
 		case client.Game:
-			err := sm.gh.HandleMessage(clientPayload, c, clientInfo)
-			if err != nil {
-				return fmt.Errorf("game handler failed to handle message: %s", err)
-			}
+			return sm.gh.HandleMessage(clientPayload, c, clientInfo)
 		case client.List:
-			err := sm.lh.HandleMessage(clientPayload, c, clientInfo)
-			if err != nil {
-				return fmt.Errorf("list handler failed to handle message: %s", err)
-			}
+			return sm.lh.HandleMessage(clientPayload, c, clientInfo)
 		default:
-			log.Errorf("Could not handle message, client socket servicetype was not set")
+			return errors.New("Could not handle message, client socket servicetype was not set")
 		}
 	}
 }

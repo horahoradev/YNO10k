@@ -33,8 +33,15 @@ type GameHandler struct {
 	sockinfoFlushMap map[string]*client.ClientSockInfo
 }
 
+func NewGameHandler(ps client.PubSubManager) *GameHandler {
+	return &GameHandler{
+		pubsubManager:    ps,
+		sockinfoFlushMap: make(map[string]*client.ClientSockInfo),
+	}
+}
+
 func (ch *GameHandler) HandleMessage(payload []byte, c gnet.Conn, s *client.ClientSockInfo) error {
-	return nil
+	return ch.muxMessage(payload, c, s)
 
 }
 
@@ -60,22 +67,20 @@ func (ch *GameHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 		return ch.handleVariable(payload, s)
 	case animFrame:
 		// Unimplemented
-
+		return errors.New("Received unimplemented message type animFrame")
 	case switchsync:
 		return ch.handleSwitchSync(payload, s)
-
 	case animtype:
 		// Unimplemented
+		return errors.New("Received unimplemented message type animtype")
 
 	case facing:
 		return ch.handleFacing(payload, s)
-
 	case typingstatus:
 		return ch.handleTypingStatus(payload, s)
-
 	case syncme:
 		// Deprecated
-
+		return errors.New("Deprecated message type syncme")
 	default:
 		return fmt.Errorf("Received unknown message %s", payload[0])
 	}
@@ -98,6 +103,7 @@ func (ch *GameHandler) flushWorker() error {
 			}
 		}
 	}
+	return nil
 }
 
 func (ch *GameHandler) handleMovement(payload []byte, c *client.ClientSockInfo) error {

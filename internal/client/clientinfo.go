@@ -3,6 +3,8 @@ package client
 import (
 	"net"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/panjf2000/gnet"
 )
 
@@ -16,15 +18,31 @@ func (cid *ClientID) GetAddr() net.Addr {
 	return cid.Conn.RemoteAddr()
 }
 
+func (cid *ClientID) GetTrip() string {
+	return cid.Tripcode
+}
+
+func (cid *ClientID) SetTrip(trip string) {
+	cid.Tripcode = trip
+}
+
+func (cid *ClientID) GetUsername() string {
+	return cid.Name
+}
+
+func (cid *ClientID) SetUsername(name string) {
+	cid.Name = name
+}
+
 type Client interface {
 	Ignore(net.Addr)
 	Unignore(net.Addr)
 	Send(payload []byte, sender net.Addr) error
 	GetAddr() net.Addr
 	GetTrip() string
-	SetTrip(string)
+	SetTrip(trip string)
 	GetUsername() string
-	Setusername(string)
+	SetUsername(name string)
 }
 
 type GameClient struct {
@@ -111,5 +129,9 @@ func newClient(t ServiceType, conn gnet.Conn) Client {
 		return &GameClient{
 			ClientID: clientID,
 		}
+	default:
+		// TODO
+		log.Errorf("Invalid client type")
+		return nil
 	}
 }

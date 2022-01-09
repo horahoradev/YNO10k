@@ -14,6 +14,7 @@ const (
 type UnignoreChatEvents struct {
 	MatchPrefix       string `ynoproto:"0"`
 	UnignoredUsername string
+	UnignoredTrip     string
 }
 
 type UnignoreGameEvents struct {
@@ -24,6 +25,7 @@ type UnignoreGameEvents struct {
 type IgnoreChatEvents struct {
 	MatchPrefix     string `ynoproto:"2"`
 	IgnoredUsername string
+	IgnoredTrip     string
 }
 
 type IgnoreGameEvents struct {
@@ -82,7 +84,7 @@ type Sound struct {
 	Volume      uint16
 	Tempo       uint16
 	Balance     uint16
-	SoundFIle   string
+	SoundFile   string
 }
 
 //uint16 packet type, uint16 weather type, uint16 weather strength

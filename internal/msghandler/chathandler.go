@@ -6,7 +6,6 @@ import (
 
 	"github.com/horahoradev/YNO10k/internal/client"
 	"github.com/horahoradev/YNO10k/internal/clientmessages"
-	"github.com/horahoradev/YNO10k/internal/messages"
 	"github.com/horahoradev/YNO10k/internal/protocol"
 	"github.com/horahoradev/YNO10k/internal/servermessages"
 	"github.com/panjf2000/gnet"
@@ -24,6 +23,12 @@ const (
 
 type ChatHandler struct {
 	pm client.PubSubManager
+}
+
+func NewChatHandler(pm client.PubSubManager) *ChatHandler {
+	return &ChatHandler{
+		pm: pm,
+	}
 }
 
 func (ch *ChatHandler) HandleMessage(payload []byte, c gnet.Conn, s *client.ClientSockInfo) error {
@@ -68,7 +73,7 @@ func (ch *ChatHandler) pardonChat(payload []byte, client *client.ClientSockInfo)
 		return err
 	}
 
-	user, err := ch.pm.GetUsernameForGame(client.GameName, t.UnignoredUsername)
+	user, err := ch.pm.GetUsernameForGame(client.GameName, client.RoomName, t.UnignoredUsername, t.UnignoredTrip)
 	if err != nil {
 		return err
 	}
@@ -91,7 +96,7 @@ func (ch *ChatHandler) pardonChat(payload []byte, client *client.ClientSockInfo)
 // }
 
 func (ch *ChatHandler) ignoreChat(payload []byte, client *client.ClientSockInfo) error {
-	t := messages.IgnoreChatEvents{}
+	t := clientmessages.IgnoreChatEvents{}
 	matched, err := protocol.Marshal(payload, &t)
 	switch {
 	case !matched:
@@ -100,7 +105,7 @@ func (ch *ChatHandler) ignoreChat(payload []byte, client *client.ClientSockInfo)
 		return err
 	}
 
-	user, err := ch.pm.GetUsernameForGame(client.GameName, t.UnignoredUsername)
+	user, err := ch.pm.GetUsernameForGame(client.GameName, client.RoomName, t.IgnoredUsername, t.IgnoredTrip)
 	if err != nil {
 		return err
 	}
@@ -138,7 +143,7 @@ func (ch *ChatHandler) setUsername(payload []byte, client *client.ClientSockInfo
 		return err
 	}
 
-	client.ClientInfo.Setusername(t.Username)
+	client.ClientInfo.SetUsername(t.Username)
 	client.ClientInfo.SetTrip(t.Tripcode)
 
 	return ch.pm.Broadcast(servermessages.ServerMessage{

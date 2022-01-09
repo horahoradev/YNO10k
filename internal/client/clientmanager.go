@@ -2,22 +2,52 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/panjf2000/gnet"
 )
 
 type ClientPubsubManager struct {
-	is ignoreSingleton
 	// Game name : client info
 	gameClientMap map[string]GameClientInfo
 }
 
+func NewClientPubsubManager() *ClientPubsubManager {
+	return &ClientPubsubManager{
+		gameClientMap: make(map[string]GameClientInfo),
+	}
+}
+
 type GameClientInfo struct {
-	// Room name: remote addr without port : client info
-	clientRoomRemoteAddrMap map[string][]Client
+	// Room name: client info
+	clientRoomRemoteAddrMap map[string][]*ClientSockInfo
+}
+
+func (cm *ClientPubsubManager) GetUsernameForGame(game, room, username, trip string) (*ClientSockInfo, error) {
+	gameClientInfo, ok := cm.gameClientMap[game]
+	if !ok {
+		return nil, fmt.Errorf("Failed to lookup client info for game %s", game)
+	}
+
+	roomClientInfo, ok := gameClientInfo.clientRoomRemoteAddrMap[room]
+	if !ok {
+		return nil, fmt.Errorf("Failed to lookup client info for room %s game %s", room, game)
+	}
+
+	// O(N) :thinking:
+	// maybe a TODO
+	for _, client := range roomClientInfo {
+		if client.ClientInfo.GetTrip() == trip && client.ClientInfo.GetUsername() == username {
+			return client, nil
+		}
+	}
+
+	return nil, errors.New("No matching client found")
 }
 
 func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gnet.Conn) (*ClientSockInfo, error) {
@@ -38,7 +68,7 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 	gameServ, ok := cm.gameClientMap[gameName]
 	if !ok {
 		cm.gameClientMap[gameName] = GameClientInfo{
-			clientRoomRemoteAddrMap: make(map[string][]Client),
+			clientRoomRemoteAddrMap: make(map[string][]*ClientSockInfo),
 		}
 	}
 
@@ -46,17 +76,16 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 
 	// Does the client info already exist somewhere? If so, move it
 	// Otherwise, just add it
-	ip := getIPFromConn(conn)
-	client := newClient(serviceType, conn)
-
-	// Deletion in old room will be handled in an async worker
-	gameServ.clientRoomRemoteAddrMap[roomName] = append(gameServ.clientRoomRemoteAddrMap[roomName], client)
-	return &ClientSockInfo{
-		ClientInfo:  client,
+	sockInfo := &ClientSockInfo{
+		ClientInfo:  newClient(serviceType, conn),
 		ServiceType: serviceType,
 		GameName:    gameName,
 		RoomName:    roomName,
-	}, nil
+	}
+
+	// Deletion in old room will be handled in an async worker
+	gameServ.clientRoomRemoteAddrMap[roomName] = append(gameServ.clientRoomRemoteAddrMap[roomName], sockInfo)
+	return sockInfo, nil
 }
 
 // Splits the service name into constituent parts
@@ -74,7 +103,7 @@ func (cm *ClientPubsubManager) splitServiceName(serviceName string) (gameName, s
 }
 
 // TODO: refactor here too
-func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo ClientSockInfo) error {
+func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo *ClientSockInfo) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -91,7 +120,7 @@ func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo ClientSoc
 	}
 
 	for _, client := range clients {
-		err = client.Send(payloadBytes, sockinfo.ClientInfo.GetAddr())
+		err = client.ClientInfo.Send(payloadBytes, sockinfo.ClientInfo.GetAddr())
 		if err != nil {
 			log.Errorf("Failed to send to client. Err: %s. Continuing...", err)
 		}
