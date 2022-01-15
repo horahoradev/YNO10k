@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>EasyRPG Player</title>
+  <link rel="stylesheet" href="styles/chat.css">
+  <link rel="stylesheet" href="styles/erpg.css">
+  <link rel="stylesheet" href="styles/style.css">
+</head>
+<body>
+  <div id="layout">
+    <div id="main_container">
+        <div id="game_container">
+            <div id="controls">
+              <button id="controls-fullscreen" class="unselectable">
+                <svg viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" width="25" height="25"><path d="M13.5 13.5H10m3.5 0V10m0 3.5l-4-4m.5-8h3.5m0 0V5m0-3.5l-4 4M5 1.5H1.5m0 0V5m0-3.5l4 4m-4 4.5v3.5m0 0H5m-3.5 0l4-4"></path></svg>
+              </button>
+            </div>
+
+            <div id="status"></div>
+			
+						<div style="position: relative; left: 0px; top: 0px; width: 100%; height: 100%;">
+							<div style="position: absolute; width: 100%; padding-top: 25%; padding-bottom: 25%; left: 0px; top: 50%; transform: translateY(-50%);">
+								<input id="chat_input_helper" style="z-index: -1; pointer-events: none; opacity: 0; width: 1px; height: 10%; padding: 0px; margin: 0px; position: absolute; right: 0px; bottom: 0px; font-size: 999999px;" spellcheck="false">
+							</div>
+            	<canvas id="canvas" tabindex="-1"></canvas>
+						</div>
+			
+			<div id="npad", class="unselectable"> 
+              <div id="npad-num1" data-key="Num1" data-key-code="49">1</div>
+              <div id="npad-num3" data-key="Num3" data-key-code="51">3</div>
+              <div id="npad-num5" data-key="Num5" data-key-code="53">5</div>
+              <div id="npad-num9" data-key="Num9" data-key-code="57">9</div>
+			</div>
+
+            <div id="dpad" class="unselectable">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72">
+                <path id="dpad-up" data-key="ArrowUp" data-key-code="38" d="M48,5.8C48,2.5,45.4,0,42,0H29.9C26.6,0,24,2.4,24,5.8V24h24V5.8z" />
+                <path id="dpad-right" data-key="ArrowRight" data-key-code="39" d="M66.2,24H48v24h18.2c3.3,0,5.8-2.7,5.8-6V29.9C72,26.5,69.5,24,66.2,24z" />
+                <path id="dpad-down" data-key="ArrowDown" data-key-code="40" d="M24,66.3c0,3.3,2.6,5.7,5.9,5.7H42c3.3,0,6-2.4,6-5.7V48H24V66.3z" />
+                <path id="dpad-left" data-key="ArrowLeft" data-key-code="37" d="M5.7,24C2.4,24,0,26.5,0,29.9V42c0,3.3,2.3,6,5.7,6H24V24H5.7z" />
+                <rect id="dpad-center" x="24" y="24" width="24" height="24" />
+              </svg>
+            </div>
+
+            <div id="apad" class="unselectable">
+              <div id="apad-escape" data-key="Escape" data-key-code="27"></div>
+              <div id="apad-enter" data-key="Enter" data-key-code="13"></div>
+            </div>
+        </div>
+      
+      <div id="chatboxContainer">
+        <div id="chatbox">
+          <div id="messages"></div>
+          <div id="chatInputContainer" style="display: none">
+            <form action="javascript:SendMessage()">
+              <input id="chatInput" type="text" autocomplete="off" maxlength="200" disabled="true" />
+            </form>
+          </div>
+          <div id="enterChatContainer">
+            <form id="enterChatForm" action="javascript:TrySendProfileInfo()">
+				<span id="enterNameInstruction">
+              		<span>You must set a nickname before you can chat.</span>
+              		<br>
+             		<small>
+               		* Maximum 8 characters
+             		<br>
+               		* Alphanumeric characters only
+             		</small>
+           		</span>
+			
+              <input id="nameInput" type="text" autocomplete="off" maxlength="8", pattern="^[A-Za-z0-9]+$"></input>
+
+				<span id="enterTripInstruction">
+              		<span> Set a tripcode.</span>
+					  <br/>
+					  <small>
+						* leave it empty to generate random code<br>
+						* use the code to authentificate yourself<br>
+						* server uses your tripcode to save your ignores<br>
+						* you can use codephrase but you should make sure that it's <b>unique</b><br>
+					  </small>
+           		</span>
+
+              <input id="tripInput" placeholder="random" type="text" autocomplete="off" maxlength="256"></input>
+			  <input id="chatEnterSubmit" type="submit" style="position: absolute; visibility: hidden; width: 1px; height: 1px; left: -9999999px;" tabindex="-1"></input>
+            </form>
+          </div>
+		  <div class = "ChatSettingsContainer">
+			<button id = "globalMessagesToggle">Hide/Show global chat</button>
+		  </div>
+        </div>
+		</div>
+    </div>
+  </div>
+<br>
+<div class="instruction">Press TAB to focus on chat</div>
+<br>
+
+<div id = "saveControllsContainer" style = "width: 50%;">
+<table id = "saveOptions" >
+				<tr>
+				<td>
+				<button id = "wantUploadSaveButton" style = "margin: 0; width: 100%; display: inline-block;">Upload save</button>
+				</td>
+				<td>
+				<button id = "wantDownloadSaveButton" style = "margin: 0; width: 100%; display: inline-block;">Download save</button>
+				</td>
+				</tr>
+			</table>
+			<div id = "uploadSaveContainer", style = "display: none">
+				<div style="display: inline-block;">Upload save</div>
+				<input type = "file" id = "uploadSaveFileInput"> </input>
+				<div style="display: inline-block;">save slot</div>
+				<input  id = "uploadSaveSlotInput" type="number" max="15" min="1" value="1"></input>
+				<button id = "uploadSaveButton">Upload</button>
+			</div>
+			<div id = "downloadSaveContainer", style = "display: none">
+				<div style="display: inline-block;">Choose slot to download</div>
+				<input  id = "downloadSaveSlotInput" type="number" max="15" min="1" value="1"></input>
+				<button id = "downloadSaveButton">Download</button>
+			</div>
+</div>
+
+<a href="https://gitlab.com/CataractJustice/YNOnline/">Server source code</a><br>
+<a href="https://github.com/CataractJustice/ynoclient">Client source code</a><br>
+<br>
+
+<script type="text/javascript" src="scripts/gameapi.js"></script>
+<script type="text/javascript" src="scripts/ingameapi.js"></script>
+<script type="text/javascript" src="scripts/ynonline.js"></script>
+<script type="text/javascript" src="index.js"></script>
+<script type="text/javascript" src="scripts/chat.js"></script>
+<script type="text/javascript" src="scripts/erpg.js"></script>
+<script type="text/javascript" src="scripts/config.js"></script>
+<script type="text/javascript" src="scripts/commands/spritefav.js"></script>
+<script type="text/javascript" src="scripts/commands/getuuid.js"></script>
+<script type="text/javascript" src="scripts/commands/connectioninfo.js"></script>
+<script type="text/javascript" src="scripts/commands/playerroomconnections.js"></script>
+<script type="text/javascript" src="scripts/commands/pvol.js"></script>
+<script type="text/javascript" src="scripts/commands/helpcommand.js"></script>
+<script type="text/javascript" src="scripts/commands/spriteset.js"></script>
+<script type="text/javascript" src="scripts/commands/ignore.js"></script>
+<script type="text/javascript" src="scripts/commands/pardon.js"></script>
+<script type="text/javascript" src="scripts/commands/commands.js"></script>
+<script type="text/javascript" src="scripts/saveupload.js"></script>
+<script type="text/javascript" src="scripts/savedownload.js"></script>
+<script type="text/javascript" src="scripts/switchsync.js"></script>
+<script type="text/javascript" src="scripts/onRuntimeInitialized.js"></script>
+
+</body>
+</html>

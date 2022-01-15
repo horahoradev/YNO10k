@@ -1,0 +1,134 @@
+
+#chatboxContainer {
+	display: flex;
+	width: 20%;
+	border-style: dashed;
+	border-color: var(--base-bg-color);
+	border-width: 2px;
+}
+
+button {
+	background-color: var(--element-bg-color);
+	width: 100%;
+	border: 0px solid;
+	color: white;
+	padding: 12px;
+}
+
+#chatboxContainer button:hover {
+	background-color: var(--selected-bg-color);
+}
+
+#chatboxContainer button:active {
+	background-color: var(--active-bg-color);
+}
+
+input {
+	color: var(--base-text-color);
+	background-color: var(--text-area-bg-color);
+	width: calc(100% - 12px);
+	padding: 12px;
+	margin-top: 8px;
+	border: none;
+}
+
+#chatbox {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 640px;
+}
+
+#messages {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
+
+#messages::-webkit-scrollbar {
+  width: 20px;
+}
+
+#enterNameInstruction span {
+  letter-spacing: -0.675px;
+}
+
+.messageContainer {
+  word-wrap: break-word;
+}
+
+#messages::-webkit-scrollbar-track {
+    border: 2px solid;
+	border-color: var(--border-color);
+    background-color: var(--base-bg-color);
+}
+
+#messages::-webkit-scrollbar-thumb {
+    background-color: var(--element-bg-color);
+}
+  
+.MessageContainer {
+	border: 2px solid;
+	border-color: var(--border-color);
+	margin-bottom: 0px;
+	vertical-align: center;
+}
+
+.InfoContainer {
+  border-bottom: 4px solid transparent;
+}
+
+.InfoTextContainer {
+	color: teal;
+	display: inline-block;
+}
+
+.InfoSourceContainer {
+	display: inline-block;
+}
+/*
+	.InfoSourceContainer {
+	}
+
+	.MessageProfileContainer {
+
+	}
+*/
+.MessageProfileContainer {
+	margin: 0;
+	padding: 0;
+	word-spacing: -1px;
+	display: inline-block;
+	width: 100%;
+	font-size: 14px;
+}
+
+.MessageProfileNameContainer {
+	color: rgb(240, 128, 128);
+	display: inline-block;
+}
+
+.MessageProfileTripContainer {
+	color: darkgreen;
+	display: inline-block;
+}
+
+.MessageProfileSourceContainer {
+	display: inline-block;
+	height: 100%;
+	padding-right: 4px;
+	background-color: var(--element-bg-color);
+}
+
+.MessageTextContainer {
+	margin: 0;
+	padding: 0;
+}
+
+#messages {
+	background-color: var(--text-area-bg-color);
+}
+
+.MessageContainer.G{
+	display: var(--global-chat-display);
+}
