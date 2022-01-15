@@ -48,17 +48,17 @@ ENV LC_ALL ja_JP.UTF-8
 RUN gdown https://drive.google.com/uc?id=1c8g2XBLFQ6L6KNrmI3njhgk714uX0p3W -O ./public/y2kki.zip && \
 	cd public && \
 	unzip -O shift-jis ./y2kki.zip && \
-	mkdir -p /multi_server/public/play/ && \
-	/bin/bash -c 'mv /multi_server/public/ゆめ2っきver0.117g /multi_server/public/play/gamesdefault'
+	mkdir -p /multi_server/public/play/games/ && \
+	/bin/bash -c 'mv /multi_server/public/ゆめ2っきver0.117g /multi_server/public/play/games/default'
 
-COPY gencache /multi_server/public/play/gamesdefault/ゆめ2っき/
+COPY gencache /multi_server/public/play/games/default/ゆめ2っき/
 
-RUN mv /multi_server/public/play/gamesdefault/ゆめ2っき/music /multi_server/public/play/gamesdefault/ゆめ2っき/Music
+RUN mv /multi_server/public/play/games/default/ゆめ2っき/music /multi_server/public/play/games/default/ゆめ2っき/Music
 
-RUN cd /multi_server/public/play/gamesdefault/ゆめ2っき/ && \
+RUN cd /multi_server/public/play/games/default/ゆめ2っき/ && \
 	./gencache
 
-RUN /bin/bash -c 'mv /multi_server/public/play/gamesdefault/ゆめ2っき/* /multi_server/public/play/gamesdefault/'
+RUN /bin/bash -c 'mv /multi_server/public/play/games/default/ゆめ2っき/* /multi_server/public/play/games/default/'
 
 COPY --from=0 /workdir/ynoclient/index.wasm /multi_server/public
 COPY --from=0 /workdir/ynoclient/index.js /multi_server/public
@@ -66,6 +66,6 @@ COPY --from=0 /workdir/ynoclient/index.js /multi_server/public
 COPY server/public /multi_server/public
 
 RUN mkdir -p /multi_server/public/data/default && \
-	cp -r /multi_server/public/play/gamesdefault/* /multi_server/public/data/default
+	cp -r /multi_server/public/play/games/default/* /multi_server/public/data/default
 
 ENTRYPOINT ["./multi_server"]
