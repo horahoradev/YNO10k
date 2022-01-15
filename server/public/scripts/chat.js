@@ -17,26 +17,6 @@ globalMessagesToggle.onclick = function(){
 	document.querySelector(':root').style.setProperty('--global-chat-display', globalChatDisplayed ? 'block' : 'none');
 }
 
-/*
-const (
-	pardonChat = iota
-	pardonGame
-	ignoreChat
-	ignoreGame
-	getUUID
-	userMessage
-)
-*/
-
-const ChatMessageType = {
-	pardonChat = 0,
-	pardonGame = 1,
-	ignoreChat = 2,
-	ignoreGame = 3,
-	getUUID = 4,
-	userMessage = 5
-};
-
 // split into two functions since game client can now call this
 function SendMessageString(textStr) {
   if (textStr === "") {

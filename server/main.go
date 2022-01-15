@@ -20,7 +20,7 @@ type AsyncWS struct {
 }
 
 func (ws AsyncWS) Read(p []byte) (n int, err error) {
-	p = ws.Conn.Read()
+	copy(p, ws.Conn.Read())
 	return len(p), nil
 }
 
@@ -75,7 +75,7 @@ func (ms messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gne
 	_ = ms.pool.Submit(func() {
 		header, err := ws.ReadHeader(asyncWS)
 		if err != nil {
-			log.Errorf("Failed to upgrade websocket. Err: %s", err)
+			log.Errorf("Failed to read header. Err: %s", err)
 			return
 		}
 
@@ -104,9 +104,12 @@ func main() {
 	p := goroutine.Default()
 	defer p.Release()
 
-	http.Handle("/", http.FileServer(http.Dir("public/")))
-	go http.ListenAndServe(":8080", nil)
+	go func() {
+		http.Handle("/", http.FileServer(http.Dir("public/")))
+		log.Fatal(http.ListenAndServe("0.0.0.0:8080", nil))
+	}()
 
 	mServ := newMessageServer(p)
-	log.Fatal(gnet.Serve(mServ, "tcp://:9000", gnet.WithMulticore(true)))
+	log.Print("Listening on 443")
+	log.Fatal(gnet.Serve(mServ, "0.0.0.0:443", gnet.WithMulticore(true)))
 }
