@@ -30,9 +30,9 @@ function SendMessageString(textStr) {
 
   if(textStr[0] == '!') {
   	textStr = textStr.substr(1);
-	YNOnline.Network.globalChat.SendMessage(JSON.stringify({text: textStr}));
+	YNOnline.Network.globalChat.SendMessage(String.fromCharCode(5) + textStr);
   } else if(YNOnline.Network.localChat){
-	YNOnline.Network.localChat.SendMessage(JSON.stringify({text: textStr}));
+	YNOnline.Network.localChat.SendMessage(String.fromCharCode(5) + textStr);
   } else {
 	  PrintChatInfo("You're not connected to any room\nYou can use global chat with '!' at the begining of a message", "Client");
   }
@@ -211,8 +211,8 @@ function SendProfileInfo(iName, iTrip) {
 	if(iTrip === "") iTrip = randomTripcode(16);
 
 	// send to server
-	let data = {name: iName, trip: iTrip}
-	profilepacket = JSON.stringify(data);
+	let data = String.fromCharCode(4) +	iName;
+	profilepacket = data;
 	YNOnline.Network.globalChat.SendMessage(profilepacket);
 	// update info in-game
 	let name = Module.allocate(Module.intArrayFromString(iName), Module.ALLOC_NORMAL);

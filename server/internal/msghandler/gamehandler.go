@@ -34,10 +34,12 @@ type GameHandler struct {
 }
 
 func NewGameHandler(ps client.PubSubManager) *GameHandler {
-	return &GameHandler{
+
+	g := GameHandler{
 		pubsubManager:    ps,
 		sockinfoFlushMap: make(map[string]*client.ClientSockInfo),
 	}
+	return &g
 }
 
 func (ch *GameHandler) HandleMessage(payload []byte, c gnet.Conn, s *client.ClientSockInfo) error {
@@ -88,23 +90,25 @@ func (ch *GameHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 
 }
 
-func (ch *GameHandler) flushWorker() error {
-	timer := time.NewTimer(time.Second)
-	defer timer.Stop()
+func (ch *GameHandler) flushWorker() {
+	go func() {
+		timer := time.NewTimer(time.Second)
+		defer timer.Stop()
 
-	for true {
-		<-timer.C
-		for key, si := range ch.sockinfoFlushMap {
-			flushedSO := si.SyncObject.GetFlushedChanges()
-			err := ch.pubsubManager.Broadcast(flushedSO, si)
-			if err != nil {
-				log.Errorf("Received error when broadcasting SO: %s", err)
-			} else {
-				delete(ch.sockinfoFlushMap, key)
+		for true {
+			<-timer.C
+			for key, si := range ch.sockinfoFlushMap {
+				flushedSO := si.SyncObject.GetFlushedChanges()
+				err := ch.pubsubManager.Broadcast(flushedSO, si)
+				if err != nil {
+					log.Errorf("Received error when broadcasting SO: %s", err)
+				} else {
+					delete(ch.sockinfoFlushMap, key)
+				}
 			}
 		}
-	}
-	return nil
+	}()
+	return
 }
 
 func (ch *GameHandler) handleMovement(payload []byte, c *client.ClientSockInfo) error {

@@ -12,33 +12,32 @@ const (
 */
 
 type UnignoreChatEvents struct {
-	MatchPrefix       string `ynoproto:"0"`
+	MatchPrefix       string `ynoproto:"00"`
 	UnignoredUsername string
 }
 
 type UnignoreGameEvents struct {
-	MatchPrefix       string `ynoproto:"1"`
+	MatchPrefix       string `ynoproto:"01"`
 	UnignoredUsername string
 }
 
 type IgnoreChatEvents struct {
-	MatchPrefix     string `ynoproto:"2"`
+	MatchPrefix     string `ynoproto:"02"`
 	IgnoredUsername string
 }
 
 type IgnoreGameEvents struct {
-	MatchPrefix     string `ynoproto:"3"`
+	MatchPrefix     string `ynoproto:"03"`
 	IgnoredUsername string
 }
 
 type SetUsername struct {
-	MatchPrefix string `ynoproto:"4"`
+	MatchPrefix string `ynoproto:"04"`
 	Username    string
-	Tripcode    string
 }
 
 type SendMessage struct {
-	MatchPrefix string `ynoproto:"5"`
+	MatchPrefix string `ynoproto:"05"`
 	Message     string
 }
 
@@ -61,7 +60,7 @@ const (
 
 // uint16 packet type, uint16 X, uint16_t Y
 type Movement struct {
-	MatchPrefix string `ynoproto:"1"`
+	MatchPrefix string `ynoproto:"01"`
 	X           uint16
 	Y           uint16
 }
@@ -71,14 +70,14 @@ type Movement struct {
 
 // uint16 packet type, uint16 sprite 'id', string spritesheet
 type Sprite struct {
-	MatchPrefix string `ynoproto:"2"`
+	MatchPrefix string `ynoproto:"02"`
 	SpriteID    uint16
 	Spritesheet uint32
 }
 
 //uint16 packet type, uint16 volume, uint16 tempo, uint16 balance, string sound file
 type Sound struct {
-	MatchPrefix string `ynoproto:"3"`
+	MatchPrefix string `ynoproto:"03"`
 	Volume      uint16
 	Tempo       uint16
 	Balance     uint16
@@ -87,14 +86,14 @@ type Sound struct {
 
 //uint16 packet type, uint16 weather type, uint16 weather strength
 type Weather struct {
-	MatchPrefix     string `ynoproto:"4"`
+	MatchPrefix     string `ynoproto:"04"`
 	WeatherType     uint16
 	WeatherStrength uint16
 }
 
 //uint16 packet type, string name
 type Name struct {
-	MatchPrefix string `ynoproto:"5"`
+	MatchPrefix string `ynoproto:"05"`
 	Name        string
 }
 

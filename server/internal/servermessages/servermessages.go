@@ -5,13 +5,13 @@ type GetUUID struct {
 
 // TODO: used for e.g. error indications
 type ServerMessage struct {
-	MessageType string
-	Message     string
+	Type string `json:"type"`
+	Text string `json:"text"`
 }
 
 type UserMessage struct {
-	MessageType string
-	Text        string
-	Name        string
-	Trip        string
+	Type string `json:"type"`
+	Text string `json:"text"`
+	Name string `json:"name"`
+	Trip string `json:"trip"`
 }

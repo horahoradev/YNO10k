@@ -88,6 +88,7 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 		ServiceType: serviceType,
 		GameName:    gameName,
 		RoomName:    roomName,
+		SyncObject:  NewSyncObject(),
 	}
 
 	// Deletion in old room will be handled in an async worker
@@ -103,7 +104,7 @@ func (cm *ClientPubsubManager) splitServiceName(serviceName string) (gameName, s
 	rs := validID.FindStringSubmatch(serviceName)
 
 	switch {
-	case len(rs) > 0:
+	case len(rs) > 0 && len(rs[0]) > 0:
 		return "yumenikki", rs[0], nil
 
 	default:
@@ -125,9 +126,10 @@ func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo *ClientSo
 
 	clients, ok := gameClientInfo.clientRoomRemoteAddrMap[sockinfo.RoomName]
 	if !ok {
-		return fmt.Errorf("Failed to broadcast, could not fiknd client list for room name %s", sockinfo.RoomName)
+		return fmt.Errorf("Failed to broadcast, could not find client list for room name %s", sockinfo.RoomName)
 	}
 
+	log.Printf("Broadcasting for room %s", sockinfo.RoomName)
 	for _, client := range clients {
 		err = client.ClientInfo.Send(payloadBytes, sockinfo.ClientInfo.GetAddr())
 		if err != nil {

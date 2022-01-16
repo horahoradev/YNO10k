@@ -39,7 +39,7 @@ func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
 
 	msgVal, err := hex.DecodeString(msgPrefix)
 	if err != nil {
-		return false, errors.New("Failed to decode matchprefix to hex")
+		return false, fmt.Errorf("Failed to decode matchprefix %s to hex", msgPrefix)
 	}
 
 	if len(msgVal) != 1 {

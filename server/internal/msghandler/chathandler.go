@@ -138,17 +138,23 @@ func (ch *ChatHandler) setUsername(payload []byte, client *client.ClientSockInfo
 	t := clientmessages.SetUsername{}
 	matched, err := protocol.Marshal(payload, &t)
 	switch {
-	case !matched:
-		return errors.New("Failed to match")
 	case err != nil:
 		return err
+	case !matched:
+		return errors.New("Failed to match set username")
+	}
+
+	if client.ClientInfo.GetUsername() != "" {
+		return errors.New("Username already set")
 	}
 
 	client.ClientInfo.SetUsername(t.Username)
 
+	log.Printf("Set username for user %s", t.Username)
+
 	return ch.pm.Broadcast(servermessages.ServerMessage{
-		MessageType: "server",
-		Message:     fmt.Sprintf("%s#%s has connected to the channel", t.Username, client),
+		Type: "serverInfo",
+		Text: fmt.Sprintf("%s has connected to the channel", t.Username),
 	}, client)
 }
 
@@ -156,17 +162,20 @@ func (ch *ChatHandler) sendUserMessage(payload []byte, client *client.ClientSock
 	t := clientmessages.SendMessage{}
 	matched, err := protocol.Marshal(payload, &t)
 	switch {
-	case !matched:
-		return errors.New("Failed to match")
 	case err != nil:
 		return err
+	case !matched:
+		return errors.New("Failed to match send user message")
 	}
 
 	if client.ClientInfo.GetUsername() == "" {
 		return errors.New("name not set, cannot send message")
 	}
 
+	log.Printf("Sending user message %s", t.Message)
+
 	return ch.pm.Broadcast(servermessages.UserMessage{
+		Type: "userMessage",
 		Text: t.Message,
 		Name: client.ClientInfo.GetUsername(),
 	}, client)

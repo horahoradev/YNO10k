@@ -31,12 +31,6 @@ RUN cd /usr/local && \
 
 ENV PATH=$PATH:/usr/local/go/bin
 
-COPY server orbs
-
-RUN cd orbs && \
-	go mod vendor && \
-    go build --mod=vendor -o /multi_server/multi_server .
-
 RUN apt-get install -y python3 unzip python3-pip locales locales-all && \
 	pip install gdown
 
@@ -69,5 +63,11 @@ RUN mkdir -p /multi_server/public/data/default && \
 	cp -r /multi_server/public/play/games/default/* /multi_server/public/data/default
 
 RUN apt-get install -y strace
+
+COPY server orbs
+
+RUN cd orbs && \
+	go mod vendor && \
+    go build --mod=vendor -o /multi_server/multi_server .
 
 ENTRYPOINT ["./multi_server"]

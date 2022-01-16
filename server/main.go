@@ -17,6 +17,20 @@ import (
 	"github.com/gobwas/ws"
 )
 
+type AsyncWriterWS struct {
+	Conn gnet.Conn
+}
+
+func newAyncWriter(c gnet.Conn) io.Writer {
+	return AsyncWS{
+		Conn: c,
+	}
+}
+
+func (ws AsyncWriterWS) Write(p []byte) (n int, err error) {
+	return len(p), ws.Conn.AsyncWrite(p)
+}
+
 type AsyncWS struct {
 	Conn gnet.Conn
 	Buf  io.Reader
@@ -57,6 +71,16 @@ func newMessageServer(pool *goroutine.Pool) messageServer {
 	}
 }
 
+type gnetWrapper struct {
+	gnet.Conn
+}
+
+func (g *gnetWrapper) AsyncWrite(buf []byte) error {
+	respFrame := ws.NewFrame(ws.OpText, true, buf)
+	asyncWriter := newAyncWriter(g.Conn)
+	return ws.WriteFrame(asyncWriter, respFrame)
+}
+
 // Shouldn't be called until after we upgrade the websocket, so this is safe
 func (ms messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
 	asyncWS := newAsyncWS(c, bytes.NewReader(frame))
@@ -78,13 +102,17 @@ func (ms messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gne
 	// This is a blocking thread pool, we don't want to loop infinitely and consume all workers
 	// It's assumed that all messages will arrive in a single tcp packet, but that's required by the websocket protocol
 	err1 := ms.pool.Submit(func() {
+		log.Print("Reading frame")
 		wsFrame, err := ws.ReadFrame(asyncWS)
 		if err != nil {
-			log.Errorf("Failed to read header. Err: %s", err)
+			log.Errorf("Failed to read frame. Err: %s", err)
 			return
 		}
 
-		wsFrame = ws.UnmaskFrame(wsFrame)
+		if wsFrame.Header.Masked {
+			wsFrame = ws.UnmaskFrame(wsFrame)
+		}
+		log.Printf("Decoded frame %s", wsFrame.Payload)
 
 		if wsFrame.Header.OpCode == ws.OpClose {
 			log.Print("Received close opcode, closing connection")
@@ -93,20 +121,20 @@ func (ms messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gne
 		}
 
 		log.Print("Handling message")
-		err = ms.serviceMux.HandleMessage(wsFrame.Payload, c, nil)
+		err = ms.serviceMux.HandleMessage(wsFrame.Payload, &gnetWrapper{Conn: c}, nil)
 		if err != nil {
 			log.Errorf("Could not handle client message. Err: %s", err)
 		}
 	})
 	if err1 != nil {
-		log.Errorf("Failed to submit job to worker poool. Err: %s", err1)
+		log.Errorf("Failed to submit job to worker pool. Err: %s", err1)
 	}
 
 	return nil, gnet.None
 }
 
 func (ms messageServer) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
-	log.Errorf("Closing connection, err: %s", err)
+	log.Errorf("Closing connection, err: %s. State: %s. ", err)
 	return
 }
 
@@ -116,7 +144,7 @@ func main() {
 
 	go func() {
 		http.Handle("/", http.FileServer(http.Dir("public/")))
-		log.Fatal(http.ListenAndServe("0.0.0.0:8080", nil))
+		log.Fatal(http.ListenAndServe("0.0.0.0:8085", nil))
 	}()
 
 	mServ := newMessageServer(p)
