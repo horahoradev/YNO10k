@@ -55,12 +55,12 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 	// TODO: cleanup old sock addr in clientRemoteAddrMap
 
 	// Split provided servicename into something we can use
-	gameName, roomName, err := cm.splitServiceName(serviceName)
+	gameName, roomName, err := SplitServiceName(serviceName)
 	if err != nil {
 		return nil, err
 	}
 
-	serviceType, err := getTypeFromRoomName(roomName)
+	serviceType, err := GetTypeFromRoomName(roomName)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 }
 
 // Splits the service name into constituent parts
-func (cm *ClientPubsubManager) splitServiceName(serviceName string) (gameName, serviceType string, err error) {
+func SplitServiceName(serviceName string) (gameName, serviceType string, err error) {
 	// ^([a-zA-Z\d]*)
 	// THIS IS A TODO, just did a hacky fix here
 	validID := regexp.MustCompile(`^(gchat|game\d*|chat\d*)\z`)
@@ -153,7 +153,7 @@ const (
 	List       ServiceType = "List"
 )
 
-func getTypeFromRoomName(roomname string) (ServiceType, error) {
+func GetTypeFromRoomName(roomname string) (ServiceType, error) {
 	// FIXME
 	// This code block is a little sus, come back to later
 	switch {

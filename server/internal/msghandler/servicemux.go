@@ -2,7 +2,7 @@ package msghandler
 
 import (
 	"errors"
-	"sync"
+	"net"
 
 	"github.com/horahoradev/YNO10k/internal/client"
 	"github.com/panjf2000/gnet"
@@ -12,41 +12,36 @@ import (
 // Similar to chain of responsibility pattern
 // Passes message to the appropriate service
 type ServiceMux struct {
-	cm client.PubSubManager
-	gh Handler
-	ch Handler
-	lh Handler
-	m  sync.Mutex
+	cm          client.PubSubManager
+	gh          Handler
+	ch          Handler
+	lh          Handler
+	SyncChanMap map[net.Addr]chan struct{}
 }
 
 func NewServiceMux(gh, ch, lh Handler, cm client.PubSubManager) ServiceMux {
 	return ServiceMux{
-		cm: cm,
-		gh: gh,
-		ch: ch,
-		lh: lh,
-		m:  sync.Mutex{},
+		cm:          cm,
+		gh:          gh,
+		ch:          ch,
+		lh:          lh,
+		SyncChanMap: make(map[net.Addr]chan struct{}),
 	}
 }
 
 func (sm ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *client.ClientSockInfo) error {
 	log.Print("Handling service message")
 
-	// Do we have existing context? Then it's a normal message
-	var clientInfo *client.ClientSockInfo
-	ctx := c.Context()
-	if ctx != nil {
-		var ok bool
-		clientInfo, ok = ctx.(*client.ClientSockInfo)
-		if !ok {
-			log.Errorf("Failed to typecast context to client")
-			c.Close()
-			return errors.New("failed to typecast context to client")
-		}
+	syncChan, ok := sm.SyncChanMap[c.RemoteAddr()]
+	if !ok {
+		syncChan = make(chan struct{})
+		sm.SyncChanMap[c.RemoteAddr()] = syncChan
 	}
 
+	// Do we have existing context? Then it's a normal message
+	_, _, err := client.SplitServiceName(string(clientPayload))
 	switch {
-	case clientInfo == nil:
+	case getClientSockInfo(c) == nil && err == nil:
 		// This is a packet I have no need for. FIXME on the client
 		if string(clientPayload) == "chat" {
 			return nil
@@ -54,27 +49,24 @@ func (sm ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *cli
 
 		// This is the servicename packet, use it to initialize the client info
 		log.Printf("Subscribing client to room %s", string(clientPayload))
-		clientInfo, err := sm.cm.SubscribeClientToRoom(string(clientPayload), c)
+		cInfo, err := sm.cm.SubscribeClientToRoom(string(clientPayload), c)
 		if err != nil {
 			log.Errorf("Failed to add client for room. Err: %s", err)
-			// FIXME DRY
-			switch clientInfo.ServiceType {
-			case client.GlobalChat, client.Chat:
-				return sm.ch.HandleMessage(clientPayload, c, clientInfo)
-			case client.Game:
-				return sm.gh.HandleMessage(clientPayload, c, clientInfo)
-			case client.List:
-				return sm.lh.HandleMessage(clientPayload, c, clientInfo)
-			default:
-				return errors.New("Could not handle message, client socket servicetype was not set")
-			}
+			return err
 		}
 		log.Printf("Subscribed client to room %s", string(clientPayload))
 		// Store the client info with the connection
-		c.SetContext(clientInfo)
+		c.SetContext(cInfo)
+		log.Print("CLOSE FOR CHANNEL %S", string(clientPayload))
+		close(syncChan)
 		return nil
 
 	default:
+		<-syncChan
+		clientInfo := getClientSockInfo(c)
+		if clientInfo == nil {
+			return errors.New("Clientinfo nil in message handler main code path")
+		}
 		// We've already received the service packet, so this is regular message
 		switch clientInfo.ServiceType {
 		case client.GlobalChat, client.Chat:
@@ -87,4 +79,21 @@ func (sm ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *cli
 			return errors.New("Could not handle message, client socket servicetype was not set")
 		}
 	}
+}
+
+func getClientSockInfo(c gnet.Conn) *client.ClientSockInfo {
+	ctx := c.Context()
+	if ctx != nil {
+		var ok bool
+		clientInfo, ok := ctx.(*client.ClientSockInfo)
+		if !ok {
+			log.Errorf("Failed to typecast context to client")
+			c.Close()
+			return nil
+		}
+
+		return clientInfo
+	}
+
+	return nil
 }
