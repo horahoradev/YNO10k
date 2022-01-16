@@ -68,4 +68,6 @@ COPY server/public /multi_server/public
 RUN mkdir -p /multi_server/public/data/default && \
 	cp -r /multi_server/public/play/games/default/* /multi_server/public/data/default
 
+RUN apt-get install -y strace
+
 ENTRYPOINT ["./multi_server"]

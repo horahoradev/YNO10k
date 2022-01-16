@@ -32,6 +32,7 @@ func NewChatHandler(pm client.PubSubManager) *ChatHandler {
 }
 
 func (ch *ChatHandler) HandleMessage(payload []byte, c gnet.Conn, s *client.ClientSockInfo) error {
+	log.Print("Handling chat message")
 	return ch.muxMessage(payload, c, s)
 }
 

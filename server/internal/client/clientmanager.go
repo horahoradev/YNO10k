@@ -99,7 +99,7 @@ func (cm *ClientPubsubManager) splitServiceName(serviceName string) (gameName, s
 		return rs[0], rs[1], nil
 
 	default:
-		return "", "", fmt.Errorf("invalid servicename pattern")
+		return "", "", fmt.Errorf("invalid servicename pattern for %s", serviceName)
 	}
 }
 

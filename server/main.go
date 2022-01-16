@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"net/http"
+	"strings"
 
 	"github.com/horahoradev/YNO10k/internal/client"
 	"github.com/horahoradev/YNO10k/internal/msghandler"
@@ -16,22 +18,23 @@ import (
 )
 
 type AsyncWS struct {
-	gnet.Conn
+	Conn gnet.Conn
+	Buf  io.Reader
 }
 
 func (ws AsyncWS) Read(p []byte) (n int, err error) {
-	copy(p, ws.Conn.Read())
-	return len(p), nil
+	return ws.Buf.Read(p)
 }
 
-func newAsyncWS(c gnet.Conn) io.ReadWriter {
+func newAsyncWS(c gnet.Conn, buf io.Reader) io.ReadWriter {
 	return AsyncWS{
 		Conn: c,
+		Buf:  buf,
 	}
 }
 
 func (ws AsyncWS) Write(p []byte) (n int, err error) {
-	return len(p), ws.AsyncWrite(p)
+	return len(p), ws.Conn.AsyncWrite(p)
 }
 
 type messageServer struct {
@@ -54,49 +57,56 @@ func newMessageServer(pool *goroutine.Pool) messageServer {
 	}
 }
 
-func (es messageServer) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
-	asyncWS := newAsyncWS(c)
-	_, err := ws.Upgrade(asyncWS)
-	if err != nil {
-		log.Errorf("Failed to upgrade websocket. Err: %s", err)
-		return
-	}
-
-	return
-}
-
 // Shouldn't be called until after we upgrade the websocket, so this is safe
 func (ms messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
-	asyncWS := newAsyncWS(c)
+	asyncWS := newAsyncWS(c, bytes.NewReader(frame))
+	log.Printf("Reacting to new packet: %s", string(frame))
+
+	// OK this is super lame but whatever
+	if strings.Contains(string(frame), "Upgrade") {
+		log.Print("Upgrading websocket")
+		_, err := ws.Upgrade(asyncWS)
+		if err != nil {
+			log.Errorf("Failed to upgrade websocket. Err: %s", err)
+			return
+		}
+		log.Print("Upgraded ws successfully")
+		return
+	}
 
 	// Use ants pool to unblock the event-loop.
 	// This is a blocking thread pool, we don't want to loop infinitely and consume all workers
 	// It's assumed that all messages will arrive in a single tcp packet, but that's required by the websocket protocol
-	_ = ms.pool.Submit(func() {
-		header, err := ws.ReadHeader(asyncWS)
+	err1 := ms.pool.Submit(func() {
+		wsFrame, err := ws.ReadFrame(asyncWS)
 		if err != nil {
 			log.Errorf("Failed to read header. Err: %s", err)
 			return
 		}
 
-		clientPayload := make([]byte, header.Length)
-		_, err = io.ReadFull(asyncWS, clientPayload)
-		if err != nil {
-			log.Errorf("Failed to read full message. Err: %s", err)
-			return
-		}
+		wsFrame = ws.UnmaskFrame(wsFrame)
 
-		if header.OpCode == ws.OpClose {
+		if wsFrame.Header.OpCode == ws.OpClose {
+			log.Print("Received close opcode, closing connection")
 			c.Close()
 			return
 		}
 
-		err = ms.serviceMux.HandleMessage(clientPayload, c, nil)
+		log.Print("Handling message")
+		err = ms.serviceMux.HandleMessage(wsFrame.Payload, c, nil)
 		if err != nil {
 			log.Errorf("Could not handle client message. Err: %s", err)
 		}
 	})
+	if err1 != nil {
+		log.Errorf("Failed to submit job to worker poool. Err: %s", err1)
+	}
 
+	return nil, gnet.None
+}
+
+func (ms messageServer) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
+	log.Errorf("Closing connection, err: %s", err)
 	return
 }
 
@@ -111,5 +121,5 @@ func main() {
 
 	mServ := newMessageServer(p)
 	log.Print("Listening on 443")
-	log.Fatal(gnet.Serve(mServ, "0.0.0.0:443", gnet.WithMulticore(true)))
+	log.Fatal(gnet.Serve(mServ, "0.0.0.0:443"))
 }

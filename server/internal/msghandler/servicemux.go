@@ -27,6 +27,8 @@ func NewServiceMux(gh, ch, lh Handler, cm client.PubSubManager) ServiceMux {
 }
 
 func (sm ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *client.ClientSockInfo) error {
+	log.Print("Handling service message")
+
 	// Do we have existing context? Then it's a normal message
 	var clientInfo *client.ClientSockInfo
 	ctx := c.Context()
@@ -43,7 +45,7 @@ func (sm ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *cli
 	switch {
 	case clientInfo == nil:
 		// This is the servicename packet, use it to initialize the client info
-
+		log.Printf("Subscribing client to room %s", string(clientPayload))
 		clientInfo, err := sm.cm.SubscribeClientToRoom(string(clientPayload), c)
 		if err != nil {
 			log.Errorf("Failed to add client for room. Err: %s", err)
