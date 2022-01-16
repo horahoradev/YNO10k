@@ -68,9 +68,15 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 	// Does the game client manager exist? if not, create
 	gameServ, ok := cm.gameClientMap[gameName]
 	if !ok {
-		cm.gameClientMap[gameName] = GameClientInfo{
+		gameServ := GameClientInfo{
 			clientRoomRemoteAddrMap: make(map[string][]*ClientSockInfo),
 		}
+
+		cm.gameClientMap[gameName] = gameServ
+	}
+
+	if gameServ.clientRoomRemoteAddrMap == nil {
+		gameServ.clientRoomRemoteAddrMap = make(map[string][]*ClientSockInfo)
 	}
 
 	// TODO: initialize second map
@@ -91,12 +97,14 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 
 // Splits the service name into constituent parts
 func (cm *ClientPubsubManager) splitServiceName(serviceName string) (gameName, serviceType string, err error) {
-	validID := regexp.MustCompile(`^([a-zA-Z\d]*)(gchat|game\d*|chat\d*)\z`)
+	// ^([a-zA-Z\d]*)
+	// THIS IS A TODO, just did a hacky fix here
+	validID := regexp.MustCompile(`^(gchat|game\d*|chat\d*)\z`)
 	rs := validID.FindStringSubmatch(serviceName)
 
 	switch {
 	case len(rs) > 0:
-		return rs[0], rs[1], nil
+		return "yumenikki", rs[0], nil
 
 	default:
 		return "", "", fmt.Errorf("invalid servicename pattern for %s", serviceName)
