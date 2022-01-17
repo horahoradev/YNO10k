@@ -3,6 +3,7 @@ package msghandler
 import (
 	"errors"
 	"net"
+	"sync"
 
 	"github.com/horahoradev/YNO10k/internal/client"
 	"github.com/panjf2000/gnet"
@@ -17,6 +18,7 @@ type ServiceMux struct {
 	ch          Handler
 	lh          Handler
 	SyncChanMap map[net.Addr]chan struct{}
+	m           *sync.Mutex
 }
 
 func NewServiceMux(gh, ch, lh Handler, cm client.PubSubManager) ServiceMux {
@@ -26,6 +28,7 @@ func NewServiceMux(gh, ch, lh Handler, cm client.PubSubManager) ServiceMux {
 		ch:          ch,
 		lh:          lh,
 		SyncChanMap: make(map[net.Addr]chan struct{}),
+		m:           &sync.Mutex{},
 	}
 }
 
@@ -33,10 +36,12 @@ func (sm ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *cli
 	log.Debug("Handling service message")
 
 	syncChan, ok := sm.SyncChanMap[c.RemoteAddr()]
+	sm.m.Lock()
 	if !ok {
 		syncChan = make(chan struct{})
 		sm.SyncChanMap[c.RemoteAddr()] = syncChan
 	}
+	sm.m.Unlock()
 
 	// Do we have existing context? Then it's a normal message
 	_, _, err := client.SplitServiceName(string(clientPayload))

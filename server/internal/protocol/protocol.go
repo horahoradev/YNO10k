@@ -18,6 +18,11 @@ import (
 */
 
 func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
+	if msgbuf[0] == 0 {
+		// LMAO FIXME
+		msgbuf = msgbuf[1:]
+	}
+
 	e := reflect.ValueOf(target).Elem()
 
 	t := e.Type()
@@ -71,7 +76,10 @@ func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
 
 		switch f.Kind() {
 		case reflect.Uint16:
-			n := binary.BigEndian.Uint16(msgbuf[i:])
+			if len(msgbuf[i:]) < 2 {
+				return false, fmt.Errorf("invalid length for uint16")
+			}
+			n := binary.BigEndian.Uint16(msgbuf[i : i+2])
 
 			// Not sure if this is really valid for uint16
 			if f.OverflowUint(uint64(n)) {

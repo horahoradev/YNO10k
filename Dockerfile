@@ -66,8 +66,13 @@ RUN apt-get install -y strace
 
 COPY server orbs
 
+COPY server/public /multi_server/public
+
 RUN cd orbs && \
 	go mod vendor && \
     go build --mod=vendor -o /multi_server/multi_server .
+	
+COPY --from=0 /workdir/ynoclient/index.wasm /multi_server/public
+COPY --from=0 /workdir/ynoclient/index.js /multi_server/public
 
 ENTRYPOINT ["./multi_server"]
