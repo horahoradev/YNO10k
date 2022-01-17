@@ -30,7 +30,7 @@ func NewServiceMux(gh, ch, lh Handler, cm client.PubSubManager) ServiceMux {
 }
 
 func (sm ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *client.ClientSockInfo) error {
-	log.Print("Handling service message")
+	log.Debug("Handling service message")
 
 	syncChan, ok := sm.SyncChanMap[c.RemoteAddr()]
 	if !ok {
@@ -48,16 +48,15 @@ func (sm ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *cli
 		}
 
 		// This is the servicename packet, use it to initialize the client info
-		log.Printf("Subscribing client to room %s", string(clientPayload))
+		log.Debugf("Subscribing client to room %s", string(clientPayload))
 		cInfo, err := sm.cm.SubscribeClientToRoom(string(clientPayload), c)
 		if err != nil {
 			log.Errorf("Failed to add client for room. Err: %s", err)
 			return err
 		}
-		log.Printf("Subscribed client to room %s", string(clientPayload))
+		log.Debugf("Subscribed client to room %s", string(clientPayload))
 		// Store the client info with the connection
 		c.SetContext(cInfo)
-		log.Print("CLOSE FOR CHANNEL %S", string(clientPayload))
 		close(syncChan)
 		return nil
 

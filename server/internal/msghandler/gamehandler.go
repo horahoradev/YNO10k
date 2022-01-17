@@ -43,7 +43,7 @@ func NewGameHandler(ps client.PubSubManager) *GameHandler {
 }
 
 func (ch *GameHandler) HandleMessage(payload []byte, c gnet.Conn, s *client.ClientSockInfo) error {
-	log.Print("Handling game message")
+	log.Debugf("Handling game message")
 	return ch.muxMessage(payload, c, s)
 
 }

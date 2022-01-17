@@ -32,7 +32,7 @@ func NewChatHandler(pm client.PubSubManager) *ChatHandler {
 }
 
 func (ch *ChatHandler) HandleMessage(payload []byte, c gnet.Conn, s *client.ClientSockInfo) error {
-	log.Print("Handling chat message")
+	log.Debug("Handling chat message")
 	return ch.muxMessage(payload, c, s)
 }
 
@@ -150,7 +150,7 @@ func (ch *ChatHandler) setUsername(payload []byte, client *client.ClientSockInfo
 
 	client.ClientInfo.SetUsername(t.Username)
 
-	log.Printf("Set username for user %s", t.Username)
+	log.Debugf("Set username for user %s", t.Username)
 
 	return ch.pm.Broadcast(servermessages.ServerMessage{
 		Type: "serverInfo",
@@ -172,7 +172,7 @@ func (ch *ChatHandler) sendUserMessage(payload []byte, client *client.ClientSock
 		return errors.New("name not set, cannot send message")
 	}
 
-	log.Printf("Sending user message %s", t.Message)
+	log.Debugf("Sending user message %s", t.Message)
 
 	return ch.pm.Broadcast(servermessages.UserMessage{
 		Type: "userMessage",

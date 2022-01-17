@@ -129,7 +129,7 @@ func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo *ClientSo
 		return fmt.Errorf("Failed to broadcast, could not find client list for room name %s", sockinfo.RoomName)
 	}
 
-	log.Printf("Broadcasting for room %s", sockinfo.RoomName)
+	log.Debugf("Broadcasting for room %s", sockinfo.RoomName)
 	for _, client := range clients {
 		err = client.ClientInfo.Send(payloadBytes, sockinfo.ClientInfo.GetAddr())
 		if err != nil {
