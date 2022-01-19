@@ -17,10 +17,11 @@ import (
 	}
 */
 
-func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
-	if msgbuf[0] == 0 {
-		// LMAO FIXME
-		msgbuf = msgbuf[1:]
+func Marshal(msgbuf []byte, target interface{}, twoBytePrefix bool) (matched bool, err error) {
+	// TODO: detect client socket endianness and correct somewher else lmao
+	if twoBytePrefix {
+		// little endian LOL
+		msgbuf = append([]byte{msgbuf[0]}, msgbuf[2:]...)
 	}
 
 	e := reflect.ValueOf(target).Elem()
@@ -79,7 +80,20 @@ func Marshal(msgbuf []byte, target interface{}) (matched bool, err error) {
 			if len(msgbuf[i:]) < 2 {
 				return false, fmt.Errorf("invalid length for uint16")
 			}
-			n := binary.BigEndian.Uint16(msgbuf[i : i+2])
+			n := binary.LittleEndian.Uint16(msgbuf[i : i+2])
+
+			// Not sure if this is really valid for uint16
+			if f.OverflowUint(uint64(n)) {
+				return false, fmt.Errorf("provided value, %d, would overflow if assigned to struct type", n)
+			}
+
+			f.SetUint(uint64(n))
+
+		case reflect.Uint32:
+			if len(msgbuf[i:]) < 4 {
+				return false, fmt.Errorf("invalid length for uint32")
+			}
+			n := binary.LittleEndian.Uint32(msgbuf[i : i+4])
 
 			// Not sure if this is really valid for uint16
 			if f.OverflowUint(uint64(n)) {

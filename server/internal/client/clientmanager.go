@@ -131,7 +131,11 @@ func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo *ClientSo
 
 	log.Debugf("Broadcasting for room %s", sockinfo.RoomName)
 	for _, client := range clients {
-		err = client.ClientInfo.Send(payloadBytes, sockinfo.ClientInfo.GetAddr())
+		c := sockinfo.ClientInfo
+		if c == nil {
+			// Skip? Disconnect? TODO
+		}
+		err = client.ClientInfo.Send(payloadBytes, c.GetAddr())
 		if err != nil {
 			log.Errorf("Failed to send to client. Err: %s. Continuing...", err)
 		}

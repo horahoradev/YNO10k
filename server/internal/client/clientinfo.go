@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"net"
 
 	log "github.com/sirupsen/logrus"
@@ -15,6 +16,11 @@ type ClientID struct {
 
 func (cid *ClientID) GetAddr() net.Addr {
 	return cid.Conn.RemoteAddr()
+}
+
+// Dumb
+func (cid *ClientID) IsClosed() bool {
+	return cid.Conn.RemoteAddr() == nil || cid.Conn.RemoteAddr().String() == ""
 }
 
 func (cid *ClientID) GetUsername() string {
@@ -32,6 +38,7 @@ type Client interface {
 	GetAddr() net.Addr
 	GetUsername() string
 	SetUsername(name string)
+	IsClosed() bool
 }
 
 type GameClient struct {
@@ -54,8 +61,17 @@ func (gc *GameClient) Unignore(ipv4 net.Addr) {
 }
 
 func (gc *GameClient) Send(payload []byte, sender net.Addr) error {
+	// if sender == nil {
+	// 	return errors.New("Sender has disconnected")
+	// }
+
+	if gc.ClientID.Conn.RemoteAddr() == nil {
+		fmt.Errorf("client's remote addr is nil, has likely already disconnected. Dropping message.")
+		return nil
+	}
+
 	// If the sender is the current user, just return
-	if gc.ClientID.Conn.RemoteAddr().String() == sender.String() {
+	if sender != nil && gc.ClientID.Conn.RemoteAddr().String() == sender.String() {
 		return nil
 	}
 

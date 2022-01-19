@@ -54,9 +54,6 @@ RUN cd /multi_server/public/play/games/default/ゆめ2っき/ && \
 
 RUN /bin/bash -c 'mv /multi_server/public/play/games/default/ゆめ2っき/* /multi_server/public/play/games/default/'
 
-COPY --from=0 /workdir/ynoclient/index.wasm /multi_server/public
-COPY --from=0 /workdir/ynoclient/index.js /multi_server/public
-
 COPY server/public /multi_server/public
 
 RUN mkdir -p /multi_server/public/data/default && \

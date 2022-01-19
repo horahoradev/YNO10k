@@ -66,7 +66,7 @@ func (ch *ChatHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 
 func (ch *ChatHandler) pardonChat(payload []byte, client *client.ClientSockInfo) error {
 	t := clientmessages.UnignoreChatEvents{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, false)
 	switch {
 	case !matched:
 		return errors.New("Failed to match")
@@ -98,7 +98,7 @@ func (ch *ChatHandler) pardonChat(payload []byte, client *client.ClientSockInfo)
 
 func (ch *ChatHandler) ignoreChat(payload []byte, client *client.ClientSockInfo) error {
 	t := clientmessages.IgnoreChatEvents{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, false)
 	switch {
 	case !matched:
 		return errors.New("Failed to match")
@@ -136,7 +136,7 @@ func (ch *ChatHandler) ignoreChat(payload []byte, client *client.ClientSockInfo)
 
 func (ch *ChatHandler) setUsername(payload []byte, client *client.ClientSockInfo) error {
 	t := clientmessages.SetUsername{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, false)
 	switch {
 	case err != nil:
 		return err
@@ -160,7 +160,7 @@ func (ch *ChatHandler) setUsername(payload []byte, client *client.ClientSockInfo
 
 func (ch *ChatHandler) sendUserMessage(payload []byte, client *client.ClientSockInfo) error {
 	t := clientmessages.SendMessage{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, false)
 	switch {
 	case err != nil:
 		return err

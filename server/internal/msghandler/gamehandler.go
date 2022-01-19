@@ -3,11 +3,13 @@ package msghandler
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/horahoradev/YNO10k/internal/client"
 	"github.com/horahoradev/YNO10k/internal/clientmessages"
 	"github.com/horahoradev/YNO10k/internal/protocol"
+	"github.com/horahoradev/YNO10k/internal/servermessages"
 	"github.com/panjf2000/gnet"
 	log "github.com/sirupsen/logrus"
 )
@@ -31,6 +33,7 @@ const (
 type GameHandler struct {
 	pubsubManager    client.PubSubManager
 	sockinfoFlushMap map[string]*client.ClientSockInfo
+	mapLock          *sync.Mutex
 }
 
 func NewGameHandler(ps client.PubSubManager) *GameHandler {
@@ -38,7 +41,9 @@ func NewGameHandler(ps client.PubSubManager) *GameHandler {
 	g := GameHandler{
 		pubsubManager:    ps,
 		sockinfoFlushMap: make(map[string]*client.ClientSockInfo),
+		mapLock:          &sync.Mutex{},
 	}
+	g.flushWorker()
 	return &g
 }
 
@@ -69,8 +74,7 @@ func (ch *GameHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 	case variable:
 		return ch.handleVariable(payload, s)
 	case animFrame:
-		// Unimplemented
-		return errors.New("Received unimplemented message type animFrame")
+		return ch.handleAnimFrame(payload, s)
 	case switchsync:
 		return ch.handleSwitchSync(payload, s)
 	case animtype:
@@ -92,19 +96,38 @@ func (ch *GameHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 
 func (ch *GameHandler) flushWorker() {
 	go func() {
-		timer := time.NewTimer(time.Second)
+		timer := time.NewTicker(time.Second / 60)
 		defer timer.Stop()
 
 		for true {
 			<-timer.C
 			for key, si := range ch.sockinfoFlushMap {
+				// FIXME
+				if si.ClientInfo.IsClosed() {
+					ch.mapLock.Lock()
+					delete(ch.sockinfoFlushMap, key)
+					ch.mapLock.Unlock()
+					//		return {type: "disconnect", uuid: socket.syncObject.uid};
+
+					err := ch.pubsubManager.Broadcast(&servermessages.DisconnectMessage{
+						Type: "disconnect",
+						UUID: si.SyncObject.UID,
+					}, si)
+					if err != nil {
+						log.Errorf("Failed to broadcast disconnect message, continuing...")
+					}
+					continue
+				}
+
 				flushedSO := si.SyncObject.GetFlushedChanges()
 				err := ch.pubsubManager.Broadcast(flushedSO, si)
 				if err != nil {
 					log.Errorf("Received error when broadcasting SO: %s", err)
-				} else {
-					delete(ch.sockinfoFlushMap, key)
 				}
+				// Can lead to state problems if send fails, TODO
+				ch.mapLock.Lock()
+				delete(ch.sockinfoFlushMap, key)
+				ch.mapLock.Unlock()
 			}
 		}
 	}()
@@ -113,37 +136,41 @@ func (ch *GameHandler) flushWorker() {
 
 func (ch *GameHandler) handleMovement(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.Movement{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, true)
 	switch {
-	case !matched:
-		return errors.New("Failed to match in handleMovement")
 	case err != nil:
 		return err
+	case !matched:
+		return errors.New("Failed to match in handleMovement")
 	}
 
 	c.SyncObject.SetPos(t.X, t.Y)
+	ch.mapLock.Lock()
 	ch.sockinfoFlushMap[c.SyncObject.UID] = c
+	ch.mapLock.Unlock()
 	return nil
 }
 
 func (ch *GameHandler) handleSprite(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.Sprite{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, true)
 	switch {
+	case err != nil:
+		return fmt.Errorf("Failed to handleSprite. Err: %s", err)
 	case !matched:
 		return errors.New("Failed to match in handleSprite")
-	case err != nil:
-		return err
 	}
 
 	c.SyncObject.SetSprite(t.SpriteID, t.Spritesheet)
+	ch.mapLock.Lock()
 	ch.sockinfoFlushMap[c.SyncObject.UID] = c
+	ch.mapLock.Unlock()
 	return nil
 }
 
 func (ch *GameHandler) handleSound(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.Sound{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case !matched:
 		return errors.New("Failed to match in handleSound")
@@ -152,13 +179,15 @@ func (ch *GameHandler) handleSound(payload []byte, c *client.ClientSockInfo) err
 	}
 
 	c.SyncObject.SetSound(t.Volume, t.Tempo, t.Balance, t.SoundFile)
+	ch.mapLock.Lock()
 	ch.sockinfoFlushMap[c.SyncObject.UID] = c
+	ch.mapLock.Unlock()
 	return nil
 }
 
 func (ch *GameHandler) handleWeather(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.Weather{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case !matched:
 		return errors.New("Failed to match in handleWeather")
@@ -167,13 +196,15 @@ func (ch *GameHandler) handleWeather(payload []byte, c *client.ClientSockInfo) e
 	}
 
 	c.SyncObject.SetWeather(t.WeatherType, t.WeatherStrength)
+	ch.mapLock.Lock()
 	ch.sockinfoFlushMap[c.SyncObject.UID] = c
+	ch.mapLock.Unlock()
 	return nil
 }
 
 func (ch *GameHandler) handleName(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.Name{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case !matched:
 		return errors.New("Failed to match in handleWeather")
@@ -182,13 +213,15 @@ func (ch *GameHandler) handleName(payload []byte, c *client.ClientSockInfo) erro
 	}
 
 	c.SyncObject.SetName(t.Name)
+	ch.mapLock.Lock()
 	ch.sockinfoFlushMap[c.SyncObject.UID] = c
+	ch.mapLock.Unlock()
 	return nil
 }
 
 func (ch *GameHandler) handleVariable(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.Variable{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case !matched:
 		return errors.New("Failed to match in handleVariable")
@@ -197,13 +230,15 @@ func (ch *GameHandler) handleVariable(payload []byte, c *client.ClientSockInfo) 
 	}
 
 	c.SyncObject.SetVariable(t.ID, t.Value)
+	ch.mapLock.Lock()
 	ch.sockinfoFlushMap[c.SyncObject.UID] = c
+	ch.mapLock.Unlock()
 	return nil
 }
 
 func (ch *GameHandler) handleSwitchSync(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.SwitchSync{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case !matched:
 		return errors.New("Failed to match in handleSwitchSync")
@@ -212,28 +247,32 @@ func (ch *GameHandler) handleSwitchSync(payload []byte, c *client.ClientSockInfo
 	}
 
 	c.SyncObject.SetSwitch(t.ID, t.Value)
+	ch.mapLock.Lock()
 	ch.sockinfoFlushMap[c.SyncObject.UID] = c
+	ch.mapLock.Unlock()
 	return nil
 }
 
 func (ch *GameHandler) handleAnimFrame(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.AnimFrame{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, true)
 	switch {
-	case !matched:
-		return errors.New("Failed to match in handleWeather")
 	case err != nil:
 		return err
+	case !matched:
+		return errors.New("failed to match in handleAnimFrame")
 	}
 
 	c.SyncObject.SetAnimFrame(t.Frame)
+	ch.mapLock.Lock()
 	ch.sockinfoFlushMap[c.SyncObject.UID] = c
+	ch.mapLock.Unlock()
 	return nil
 }
 
 func (ch *GameHandler) handleFacing(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.Facing{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case !matched:
 		return errors.New("Failed to match in handleFacing")
@@ -242,13 +281,15 @@ func (ch *GameHandler) handleFacing(payload []byte, c *client.ClientSockInfo) er
 	}
 
 	c.SyncObject.SetFacing(t.Facing)
+	ch.mapLock.Lock()
 	ch.sockinfoFlushMap[c.SyncObject.UID] = c
+	ch.mapLock.Unlock()
 	return nil
 }
 
 func (ch *GameHandler) handleTypingStatus(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.TypingStatus{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case !matched:
 		return errors.New("Failed to match in handleTypingStatus")
@@ -257,21 +298,25 @@ func (ch *GameHandler) handleTypingStatus(payload []byte, c *client.ClientSockIn
 	}
 
 	c.SyncObject.SetTypingStatus(t.TypingStatus)
+	ch.mapLock.Lock()
 	ch.sockinfoFlushMap[c.SyncObject.UID] = c
+	ch.mapLock.Unlock()
 	return nil
 }
 
 func (ch *GameHandler) handleMovementAnimSpeed(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.MovementAnimationSpeed{}
-	matched, err := protocol.Marshal(payload, &t)
+	matched, err := protocol.Marshal(payload, &t, true)
 	switch {
-	case !matched:
-		return errors.New("Failed to match in handleMovementAnimSpeed")
 	case err != nil:
 		return err
+	case !matched:
+		return errors.New("Failed to match in handleMovementAnimSpeed")
 	}
 
 	c.SyncObject.SetMovementAnimationSpeed(t.MovementSpeed)
+	ch.mapLock.Lock()
 	ch.sockinfoFlushMap[c.SyncObject.UID] = c
+	ch.mapLock.Unlock()
 	return nil
 }

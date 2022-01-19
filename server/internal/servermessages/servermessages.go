@@ -15,3 +15,8 @@ type UserMessage struct {
 	Name string `json:"name"`
 	Trip string `json:"trip"`
 }
+
+type DisconnectMessage struct {
+	Type string `json:"type"`
+	UUID string `json:"uuid"`
+}

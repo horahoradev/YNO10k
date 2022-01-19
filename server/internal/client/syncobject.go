@@ -1,10 +1,15 @@
 package client
 
-import guuid "github.com/google/uuid"
+import (
+	"log"
+	"strconv"
+)
+
+var serial int = 0
 
 type Position struct {
-	X uint16
-	Y uint16
+	X uint16 `json:"x"`
+	Y uint16 `json:"y"`
 }
 
 //			return {id: data.readUInt32LE(2), value: data.readUInt32LE(6)};
@@ -22,7 +27,7 @@ type Sound struct {
 
 type Sprite struct {
 	ID    uint16 `json:"id"`
-	Sheet uint32 `json:"sheet"`
+	Sheet string `json:"sheet"`
 }
 
 // 			return {frame: data.readUInt16LE(2)};
@@ -43,30 +48,31 @@ type Weather struct {
 }
 
 type SyncObject struct {
-	UID string `json:"uid"` // Actually a UUID
+	Type string `json:"type"`
+	UID  string `json:"uid"` // Actually a UUID
 
-	Pos        Position `json:"pos,omitempty"`
+	Pos        *Position `json:"pos,omitempty"`
 	posChanged bool
 
-	Sprite        Sprite `json:"sprite,omitempty"`
+	Sprite        *Sprite `json:"sprite,omitempty"`
 	spriteChanged bool
 
-	Weather        Weather `json:"weather,omitempty"`
+	Weather        *Weather `json:"weather,omitempty"`
 	weatherChanged bool
 
-	Variable        Variable `json:'variable,omitempty"`
+	Variable        *Variable `json:"variable,omitempty"`
 	variableChanged bool
 
-	Sound        Sound `json:"sound,omitempty"`
+	Sound        *Sound `json:"sound,omitempty"`
 	soundChanged bool
 
 	Name        string `json:"name,omitempty"`
 	nameChanged bool
 
-	AnimFrame        AnimFrame `json:"animframe,omitempty"`
+	AnimFrame        uint16 `json:"animframe,omitempty"`
 	animframeChanged bool
 
-	Switch        Switch `json:"switch,omitempty"`
+	Switch        *Switch `json:"switch,omitempty"`
 	switchChanged bool
 
 	MovementAnimationSpeed        uint16 `json:"movementAnimationSpeed,omitempty"`
@@ -80,39 +86,44 @@ type SyncObject struct {
 }
 
 func NewSyncObject() *SyncObject {
-	uuid := guuid.New()
-	return &SyncObject{UID: uuid.String()}
+	serial += 1
+	return &SyncObject{UID: strconv.Itoa(serial), Type: "objectSync", MovementAnimationSpeed: 4}
 }
 
 func (so *SyncObject) SetPos(x, y uint16) {
 	so.posChanged = true
-	so.Pos = Position{X: x, Y: y}
+	so.Pos = &Position{X: x, Y: y}
 }
 
-func (so *SyncObject) SetSprite(id uint16, sheet uint32) {
+func (so *SyncObject) SetSprite(id uint16, sheet string) {
+	// "why do I have to do this?"
+	if id == 0 && sheet == "" {
+		return
+	}
+	so.Sprite = &Sprite{ID: id, Sheet: sheet}
 	so.spriteChanged = true
 	// TODO: sprite validation goes here
-	so.Sprite = Sprite{ID: id, Sheet: sheet}
+	log.Printf("SPRITE CHANGED TO ID %s and SHEET %s", id, sheet)
 }
 
 func (so *SyncObject) SetSound(volume uint16, tempo uint16, balance uint16, name string) {
 	so.soundChanged = true
-	so.Sound = Sound{Volume: volume, Tempo: tempo, Balance: balance, Name: name}
+	so.Sound = &Sound{Volume: volume, Tempo: tempo, Balance: balance, Name: name}
 }
 
 func (so *SyncObject) SetWeather(t, strength uint16) {
 	so.weatherChanged = true
-	so.Weather = Weather{Type: t, Strength: strength}
+	so.Weather = &Weather{Type: t, Strength: strength}
 }
 
 func (so *SyncObject) SetSwitch(id, value uint32) {
 	so.switchChanged = true
-	so.Switch = Switch{ID: id, Value: value}
+	so.Switch = &Switch{ID: id, Value: value}
 }
 
 func (so *SyncObject) SetAnimFrame(frame uint16) {
 	so.animframeChanged = true
-	so.AnimFrame = AnimFrame{Frame: frame}
+	so.AnimFrame = frame
 }
 
 func (so *SyncObject) SetName(name string) {
@@ -137,7 +148,7 @@ func (so *SyncObject) SetTypingStatus(typingStatus uint16) {
 
 func (so *SyncObject) SetVariable(id, value uint32) {
 	so.variableChanged = true
-	so.Variable = Variable{ID: id, Value: value}
+	so.Variable = &Variable{ID: id, Value: value}
 }
 
 func (so *SyncObject) GetAllChanges() interface{} {
@@ -160,7 +171,7 @@ func (so *SyncObject) clearChanges() {
 
 // So this is horrific BUT idk what to do about it lol
 func (so *SyncObject) GetFlushedChanges() interface{} {
-	s := SyncObject{UID: so.UID}
+	s := SyncObject{UID: so.UID, Type: so.Type}
 
 	if so.posChanged {
 		s.Pos = so.Pos
@@ -190,19 +201,19 @@ func (so *SyncObject) GetFlushedChanges() interface{} {
 		s.Name = so.Name
 	}
 
-	if s.movementAnimationSpeedChanged {
+	if so.movementAnimationSpeedChanged {
 		s.MovementAnimationSpeed = so.MovementAnimationSpeed
 	}
 
-	if s.facingChanged {
+	if so.facingChanged {
 		s.Facing = so.Facing
 	}
 
-	if s.typingStatusChanged {
+	if so.typingStatusChanged {
 		s.TypingStatus = so.TypingStatus
 	}
 
-	if s.animframeChanged {
+	if so.animframeChanged {
 		s.AnimFrame = so.AnimFrame
 	}
 

@@ -72,7 +72,7 @@ type Movement struct {
 type Sprite struct {
 	MatchPrefix string `ynoproto:"02"`
 	SpriteID    uint16
-	Spritesheet uint32
+	Spritesheet string
 }
 
 //uint16 packet type, uint16 volume, uint16 tempo, uint16 balance, string sound file
@@ -99,42 +99,42 @@ type Name struct {
 
 //uint16 packet type, uint16 movement speed
 type MovementAnimationSpeed struct {
-	MatchPrefix   string `ynoproto:"4"`
+	MatchPrefix   string `ynoproto:"06"`
 	MovementSpeed uint16
 }
 
 //uint16 packet type, uint32 var id, int32 value
 type Variable struct {
-	MatchPrefix string `ynoproto:"5"`
+	MatchPrefix string `ynoproto:"07"`
 	ID          uint32
 	Value       uint32
 }
 
 //uint16 packet type, uint32 switch id, int32 value
 type SwitchSync struct {
-	MatchPrefix string `ynoproto:"6"`
+	MatchPrefix string `ynoproto:"08"`
 	ID          uint32
 	Value       uint32
 }
 
 //uint16 packet type, uint16 type
 type AnimType struct {
-	MatchPrefix string `ynoproto:"7"`
+	MatchPrefix string `ynoproto:"09"`
 	Type        uint16
 }
 
 //uint16 packet type, uint16 frame
 type AnimFrame struct {
-	MatchPrefix string `ynoproto:"8"`
+	MatchPrefix string `ynoproto:"0A"`
 	Frame       uint16
 }
 
 type Facing struct {
-	MatchPrefix string `ynoproto:"9"`
+	MatchPrefix string `ynoproto:"0B"`
 	Facing      uint16
 }
 
 type TypingStatus struct {
-	MatchPrefix  string `ynoproto:"10"`
+	MatchPrefix  string `ynoproto:"0C"`
 	TypingStatus uint16
 }

@@ -35,8 +35,8 @@ func NewServiceMux(gh, ch, lh Handler, cm client.PubSubManager) ServiceMux {
 func (sm ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *client.ClientSockInfo) error {
 	log.Debug("Handling service message")
 
-	syncChan, ok := sm.SyncChanMap[c.RemoteAddr()]
 	sm.m.Lock()
+	syncChan, ok := sm.SyncChanMap[c.RemoteAddr()]
 	if !ok {
 		syncChan = make(chan struct{})
 		sm.SyncChanMap[c.RemoteAddr()] = syncChan
