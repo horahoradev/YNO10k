@@ -113,7 +113,7 @@ func SplitServiceName(serviceName string) (gameName, serviceType string, err err
 }
 
 // TODO: refactor here too
-func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo *ClientSockInfo) error {
+func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo *ClientSockInfo, fromServer bool) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -131,13 +131,21 @@ func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo *ClientSo
 
 	log.Debugf("Broadcasting for room %s", sockinfo.RoomName)
 	for _, client := range clients {
-		c := sockinfo.ClientInfo
-		if c == nil {
-			// Skip? Disconnect? TODO
-		}
-		err = client.ClientInfo.Send(payloadBytes, c.GetAddr())
-		if err != nil {
-			log.Errorf("Failed to send to client. Err: %s. Continuing...", err)
+		switch fromServer {
+		case true:
+			err = client.ClientInfo.SendFromServer(payloadBytes)
+			if err != nil {
+				log.Errorf("Failed to send to client from server. Err: %s. Continuing...", err)
+			}
+		case false:
+			c := sockinfo.ClientInfo
+			if c == nil {
+				// Skip? Disconnect? TODO
+			}
+			err = client.ClientInfo.SendFromPlayer(payloadBytes, c.GetAddr())
+			if err != nil {
+				log.Errorf("Failed to send to client. Err: %s. Continuing...", err)
+			}
 		}
 	}
 

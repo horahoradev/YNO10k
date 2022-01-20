@@ -128,8 +128,31 @@ func (ms messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gne
 	return nil, gnet.None
 }
 
+/*
+
+	if si.ClientInfo.IsClosed() {
+		ch.mapLock.Lock()
+		delete(ch.sockinfoFlushMap, key)
+		ch.mapLock.Unlock()
+		//		return {type: "disconnect", uuid: socket.syncObject.uid};
+
+		err := ch.pubsubManager.Broadcast(&servermessages.DisconnectMessage{
+			Type: "disconnect",
+			UUID: si.SyncObject.UID,
+		}, si)
+		if err != nil {
+			log.Errorf("Failed to broadcast disconnect message, continuing...")
+		}
+		continue
+	}
+*/
 func (ms messageServer) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 	log.Errorf("Closing connection, err: %s. State: %s. ", err)
+	// Send a disconnect broadcast LOL
+	err1 := ms.serviceMux.HandleMessage([]byte("DC"), c, nil)
+	if err1 != nil {
+		log.Errorf("Failed to handle disconnect message. Err: %s", err)
+	}
 	return
 }
 

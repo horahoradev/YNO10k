@@ -155,7 +155,7 @@ func (ch *ChatHandler) setUsername(payload []byte, client *client.ClientSockInfo
 	return ch.pm.Broadcast(servermessages.ServerMessage{
 		Type: "serverInfo",
 		Text: fmt.Sprintf("%s has connected to the channel", t.Username),
-	}, client)
+	}, client, true)
 }
 
 func (ch *ChatHandler) sendUserMessage(payload []byte, client *client.ClientSockInfo) error {
@@ -178,5 +178,5 @@ func (ch *ChatHandler) sendUserMessage(payload []byte, client *client.ClientSock
 		Type: "userMessage",
 		Text: t.Message,
 		Name: client.ClientInfo.GetUsername(),
-	}, client)
+	}, client, false)
 }

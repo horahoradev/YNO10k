@@ -80,7 +80,6 @@ func (ch *GameHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 	case animtype:
 		// Unimplemented
 		return errors.New("Received unimplemented message type animtype")
-
 	case facing:
 		return ch.handleFacing(payload, s)
 	case typingstatus:
@@ -88,6 +87,9 @@ func (ch *GameHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 	case syncme:
 		// Deprecated
 		return errors.New("Deprecated message type syncme")
+	case 'D':
+		// This is a disconnect packet
+		return ch.handleDisconnect(payload, s)
 	default:
 		return fmt.Errorf("Received unknown message %s", payload[0])
 	}
@@ -102,25 +104,8 @@ func (ch *GameHandler) flushWorker() {
 		for true {
 			<-timer.C
 			for key, si := range ch.sockinfoFlushMap {
-				// FIXME
-				if si.ClientInfo.IsClosed() {
-					ch.mapLock.Lock()
-					delete(ch.sockinfoFlushMap, key)
-					ch.mapLock.Unlock()
-					//		return {type: "disconnect", uuid: socket.syncObject.uid};
-
-					err := ch.pubsubManager.Broadcast(&servermessages.DisconnectMessage{
-						Type: "disconnect",
-						UUID: si.SyncObject.UID,
-					}, si)
-					if err != nil {
-						log.Errorf("Failed to broadcast disconnect message, continuing...")
-					}
-					continue
-				}
-
 				flushedSO := si.SyncObject.GetFlushedChanges()
-				err := ch.pubsubManager.Broadcast(flushedSO, si)
+				err := ch.pubsubManager.Broadcast(flushedSO, si, false)
 				if err != nil {
 					log.Errorf("Received error when broadcasting SO: %s", err)
 				}
@@ -132,6 +117,13 @@ func (ch *GameHandler) flushWorker() {
 		}
 	}()
 	return
+}
+
+func (ch *GameHandler) handleDisconnect(payload []byte, s *client.ClientSockInfo) error {
+	return ch.pubsubManager.Broadcast(&servermessages.DisconnectMessage{
+		Type: "disconnect",
+		UUID: s.SyncObject.UID,
+	}, s, true)
 }
 
 func (ch *GameHandler) handleMovement(payload []byte, c *client.ClientSockInfo) error {

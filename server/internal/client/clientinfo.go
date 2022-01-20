@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net"
 
@@ -34,11 +35,11 @@ func (cid *ClientID) SetUsername(name string) {
 type Client interface {
 	Ignore(net.Addr)
 	Unignore(net.Addr)
-	Send(payload []byte, sender net.Addr) error
+	SendFromPlayer(payload []byte, sender net.Addr) error
+	SendFromServer(payload []byte) error
 	GetAddr() net.Addr
 	GetUsername() string
 	SetUsername(name string)
-	IsClosed() bool
 }
 
 type GameClient struct {
@@ -60,28 +61,34 @@ func (gc *GameClient) Unignore(ipv4 net.Addr) {
 	}
 }
 
-func (gc *GameClient) Send(payload []byte, sender net.Addr) error {
-	// if sender == nil {
-	// 	return errors.New("Sender has disconnected")
-	// }
+func (gc *GameClient) SendFromPlayer(payload []byte, sender net.Addr) error {
+	// This can be set to nil asynchronously so we need to assign it here
+	cAddr := gc.Conn.RemoteAddr()
 
-	if gc.ClientID.Conn.RemoteAddr() == nil {
-		fmt.Errorf("client's remote addr is nil, has likely already disconnected. Dropping message.")
-		return nil
+	if cAddr == nil {
+		return fmt.Errorf("recipient's remote addr is nil, has likely already disconnected. Dropping message.")
+	}
+
+	if sender == nil {
+		return fmt.Errorf("sender has already disconnected, dropping message")
 	}
 
 	// If the sender is the current user, just return
-	if sender != nil && gc.ClientID.Conn.RemoteAddr().String() == sender.String() {
+	if cAddr.String() == sender.String() {
 		return nil
 	}
 
-	// is the sender ignored? If so, return without an error
+	// is the sender ignored or the current user? If so, return without an error
 	for _, ignoredAddr := range gc.GameIgnores {
 		if ignoredAddr.String() == sender.String() {
 			return nil
 		}
 	}
 
+	return gc.Conn.AsyncWrite(payload)
+}
+
+func (gc *GameClient) SendFromServer(payload []byte) error {
 	return gc.Conn.AsyncWrite(payload)
 }
 
@@ -97,7 +104,11 @@ func (gc *ChatClient) Ignore(ipv4 net.Addr) {
 	gc.ChatIgnores = append(gc.ChatIgnores, ipv4)
 }
 
-func (gc *ChatClient) Send(payload []byte, sender net.Addr) error {
+func (gc *ChatClient) SendFromPlayer(payload []byte, sender net.Addr) error {
+	if sender == nil {
+		return errors.New("sender has already disconnected, dropping message")
+	}
+
 	// If the sender is the current user, we want to receive it anyway
 
 	// is the sender ignored? If so, return without an error
@@ -107,6 +118,10 @@ func (gc *ChatClient) Send(payload []byte, sender net.Addr) error {
 		}
 	}
 
+	return gc.Conn.AsyncWrite(payload)
+}
+
+func (gc *ChatClient) SendFromServer(payload []byte) error {
 	return gc.Conn.AsyncWrite(payload)
 }
 
