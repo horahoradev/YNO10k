@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 
@@ -15,11 +16,13 @@ import (
 type ClientPubsubManager struct {
 	// Game name : client info
 	gameClientMap map[string]GameClientInfo
+	lock          *sync.Mutex
 }
 
 func NewClientPubsubManager() *ClientPubsubManager {
 	return &ClientPubsubManager{
 		gameClientMap: make(map[string]GameClientInfo),
+		lock:          &sync.Mutex{},
 	}
 }
 
@@ -53,6 +56,8 @@ func (cm *ClientPubsubManager) GetUsernameForGame(game, room, username string) (
 
 func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gnet.Conn) (*ClientSockInfo, error) {
 	// TODO: cleanup old sock addr in clientRemoteAddrMap
+	cm.lock.Lock()
+	defer cm.lock.Unlock()
 
 	// Split provided servicename into something we can use
 	gameName, roomName, err := SplitServiceName(serviceName)
@@ -93,6 +98,23 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 
 	// Deletion in old room will be handled in an async worker
 	gameServ.clientRoomRemoteAddrMap[roomName] = append(gameServ.clientRoomRemoteAddrMap[roomName], sockInfo)
+
+	if serviceType == Game {
+		// Send client all player room state
+		for _, player := range gameServ.clientRoomRemoteAddrMap[roomName] {
+			syncChanges := player.SyncObject.GetAllChanges()
+			syncPayload, err := json.Marshal(&syncChanges)
+			if err != nil {
+				log.Errorf("Could not get initial player state. Err: %s", err)
+			}
+
+			err = sockInfo.ClientInfo.SendFromPlayer(syncPayload, player.ClientInfo.GetAddr())
+			if err != nil {
+				log.Errorf("Failed to send initial state from player. Err: %s", err)
+			}
+		}
+	}
+
 	return sockInfo, nil
 }
 
@@ -129,7 +151,7 @@ func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo *ClientSo
 		return fmt.Errorf("Failed to broadcast, could not find client list for room name %s", sockinfo.RoomName)
 	}
 
-	log.Debugf("Broadcasting for room %s", sockinfo.RoomName)
+	log.Printf("Broadcasting for room %s, clients: %s", sockinfo.RoomName, len(clients))
 	for _, client := range clients {
 		switch fromServer {
 		case true:
@@ -150,10 +172,6 @@ func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo *ClientSo
 	}
 
 	return nil
-}
-
-func getIPFromConn(conn gnet.Conn) string {
-	return strings.Split(conn.RemoteAddr().String(), ":")[0]
 }
 
 type ServiceType string

@@ -98,7 +98,7 @@ func (ch *GameHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 
 func (ch *GameHandler) flushWorker() {
 	go func() {
-		timer := time.NewTicker(time.Second / 60)
+		timer := time.NewTicker(time.Second / 300)
 		defer timer.Stop()
 
 		for true {

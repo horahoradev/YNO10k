@@ -19,11 +19,6 @@ func (cid *ClientID) GetAddr() net.Addr {
 	return cid.Conn.RemoteAddr()
 }
 
-// Dumb
-func (cid *ClientID) IsClosed() bool {
-	return cid.Conn.RemoteAddr() == nil || cid.Conn.RemoteAddr().String() == ""
-}
-
 func (cid *ClientID) GetUsername() string {
 	return cid.Name
 }
