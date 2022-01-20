@@ -73,15 +73,11 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 	// Does the game client manager exist? if not, create
 	gameServ, ok := cm.gameClientMap[gameName]
 	if !ok {
-		gameServ := GameClientInfo{
+		gameServ = GameClientInfo{
 			clientRoomRemoteAddrMap: make(map[string][]*ClientSockInfo),
 		}
 
 		cm.gameClientMap[gameName] = gameServ
-	}
-
-	if gameServ.clientRoomRemoteAddrMap == nil {
-		gameServ.clientRoomRemoteAddrMap = make(map[string][]*ClientSockInfo)
 	}
 
 	// TODO: initialize second map
@@ -136,6 +132,8 @@ func SplitServiceName(serviceName string) (gameName, serviceType string, err err
 
 // TODO: refactor here too
 func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo *ClientSockInfo, fromServer bool) error {
+	cm.lock.Lock()
+	defer cm.lock.Unlock()
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return err

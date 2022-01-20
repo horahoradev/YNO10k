@@ -53,13 +53,11 @@ func (sm ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *cli
 		}
 
 		// This is the servicename packet, use it to initialize the client info
-		log.Debugf("Subscribing client to room %s", string(clientPayload))
 		cInfo, err := sm.cm.SubscribeClientToRoom(string(clientPayload), c)
 		if err != nil {
 			log.Errorf("Failed to add client for room. Err: %s", err)
 			return err
 		}
-		log.Debugf("Subscribed client to room %s", string(clientPayload))
 		// Store the client info with the connection
 		c.SetContext(cInfo)
 		close(syncChan)

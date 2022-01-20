@@ -137,8 +137,8 @@ func (so *SyncObject) SetMovementAnimationSpeed(animationSpeed uint16) {
 }
 
 func (so *SyncObject) SetFacing(facing uint16) {
-	so.facingChanged = true
 	so.Facing = facing
+	so.facingChanged = true
 }
 
 func (so *SyncObject) SetTypingStatus(typingStatus uint16) {

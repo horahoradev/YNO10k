@@ -266,10 +266,10 @@ func (ch *GameHandler) handleFacing(payload []byte, c *client.ClientSockInfo) er
 	t := clientmessages.Facing{}
 	matched, err := protocol.Marshal(payload, &t, true)
 	switch {
-	case !matched:
-		return errors.New("Failed to match in handleFacing")
 	case err != nil:
 		return err
+	case !matched:
+		return errors.New("Failed to match in handleFacing")
 	}
 
 	c.SyncObject.SetFacing(t.Facing)
