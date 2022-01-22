@@ -104,13 +104,13 @@ func (ch *GameHandler) flushWorker() {
 		for true {
 			<-timer.C
 			for key, si := range ch.sockinfoFlushMap {
+				ch.mapLock.Lock()
 				flushedSO := si.SyncObject.GetFlushedChanges()
 				err := ch.pubsubManager.Broadcast(flushedSO, si, false)
 				if err != nil {
 					log.Errorf("Received error when broadcasting SO: %s", err)
 				}
 				// Can lead to state problems if send fails, TODO
-				ch.mapLock.Lock()
 				delete(ch.sockinfoFlushMap, key)
 				ch.mapLock.Unlock()
 			}
