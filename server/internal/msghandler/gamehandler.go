@@ -31,17 +31,21 @@ const (
 )
 
 type GameHandler struct {
-	pubsubManager    client.PubSubManager
-	sockinfoFlushMap map[string]*client.ClientSockInfo
-	mapLock          *sync.Mutex
+	pubsubManager            client.PubSubManager
+	activeSockInfoFlushMap   map[string]*client.ClientSockInfo
+	inactiveSockInfoFlushMap map[string]*client.ClientSockInfo
+	activeRWLock             *sync.RWMutex
+	inactiveRWLock           *sync.RWMutex
 }
 
 func NewGameHandler(ps client.PubSubManager) *GameHandler {
 
 	g := GameHandler{
-		pubsubManager:    ps,
-		sockinfoFlushMap: make(map[string]*client.ClientSockInfo),
-		mapLock:          &sync.Mutex{},
+		pubsubManager:            ps,
+		activeSockInfoFlushMap:   make(map[string]*client.ClientSockInfo),
+		inactiveSockInfoFlushMap: make(map[string]*client.ClientSockInfo),
+		inactiveRWLock:           &sync.RWMutex{},
+		activeRWLock:             &sync.RWMutex{},
 	}
 	g.flushWorker()
 	return &g
@@ -103,20 +107,34 @@ func (ch *GameHandler) flushWorker() {
 
 		for true {
 			<-timer.C
-			for key, si := range ch.sockinfoFlushMap {
-				ch.mapLock.Lock()
-				flushedSO := si.SyncObject.GetFlushedChanges()
-				err := ch.pubsubManager.Broadcast(flushedSO, si, false)
-				if err != nil {
-					log.Errorf("Received error when broadcasting SO: %s", err)
-				}
-				// Can lead to state problems if send fails, TODO
-				delete(ch.sockinfoFlushMap, key)
-				ch.mapLock.Unlock()
+
+			// Swap the maps, shouldn't need to lock because we're just swapping the references
+			activeMap := ch.activeSockInfoFlushMap
+			ch.activeSockInfoFlushMap = ch.inactiveSockInfoFlushMap
+			ch.inactiveSockInfoFlushMap = activeMap
+			activeMap = ch.activeSockInfoFlushMap
+
+			wg := &sync.WaitGroup{}
+			ch.activeRWLock.RLock()
+			wg.Add(len(activeMap))
+			for _, si := range activeMap {
+				go func(wg *sync.WaitGroup) {
+					defer wg.Done()
+					flushedSO := si.SyncObject.GetFlushedChanges()
+					err := ch.pubsubManager.Broadcast(flushedSO, si, false)
+					if err != nil {
+						log.Errorf("Received error when broadcasting SO: %s", err)
+					}
+					// Can lead to state problems if send fails, TODO
+				}(wg)
 			}
+			ch.activeRWLock.RUnlock()
+			wg.Wait()
+
+			// Just reassign and let GC take care of it
+			ch.activeSockInfoFlushMap = make(map[string]*client.ClientSockInfo, len(ch.activeSockInfoFlushMap))
 		}
 	}()
-	return
 }
 
 func (ch *GameHandler) handleDisconnect(payload []byte, s *client.ClientSockInfo) error {
@@ -137,9 +155,7 @@ func (ch *GameHandler) handleMovement(payload []byte, c *client.ClientSockInfo) 
 	}
 
 	c.SyncObject.SetPos(t.X, t.Y)
-	ch.mapLock.Lock()
-	ch.sockinfoFlushMap[c.SyncObject.UID] = c
-	ch.mapLock.Unlock()
+	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }
 
@@ -154,26 +170,28 @@ func (ch *GameHandler) handleSprite(payload []byte, c *client.ClientSockInfo) er
 	}
 
 	c.SyncObject.SetSprite(t.SpriteID, t.Spritesheet)
-	ch.mapLock.Lock()
-	ch.sockinfoFlushMap[c.SyncObject.UID] = c
-	ch.mapLock.Unlock()
+	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
+}
+
+func (ch *GameHandler) scheduleChanges(uid string, c *client.ClientSockInfo) {
+	ch.inactiveRWLock.Lock()
+	ch.inactiveSockInfoFlushMap[uid] = c
+	ch.inactiveRWLock.Unlock()
 }
 
 func (ch *GameHandler) handleSound(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.Sound{}
 	matched, err := protocol.Marshal(payload, &t, true)
 	switch {
-	case !matched:
-		return errors.New("Failed to match in handleSound")
 	case err != nil:
 		return err
+	case !matched:
+		return errors.New("Failed to match in handleSound")
 	}
 
 	c.SyncObject.SetSound(t.Volume, t.Tempo, t.Balance, t.SoundFile)
-	ch.mapLock.Lock()
-	ch.sockinfoFlushMap[c.SyncObject.UID] = c
-	ch.mapLock.Unlock()
+	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }
 
@@ -188,9 +206,7 @@ func (ch *GameHandler) handleWeather(payload []byte, c *client.ClientSockInfo) e
 	}
 
 	c.SyncObject.SetWeather(t.WeatherType, t.WeatherStrength)
-	ch.mapLock.Lock()
-	ch.sockinfoFlushMap[c.SyncObject.UID] = c
-	ch.mapLock.Unlock()
+	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }
 
@@ -205,9 +221,7 @@ func (ch *GameHandler) handleName(payload []byte, c *client.ClientSockInfo) erro
 	}
 
 	c.SyncObject.SetName(t.Name)
-	ch.mapLock.Lock()
-	ch.sockinfoFlushMap[c.SyncObject.UID] = c
-	ch.mapLock.Unlock()
+	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }
 
@@ -222,9 +236,7 @@ func (ch *GameHandler) handleVariable(payload []byte, c *client.ClientSockInfo) 
 	}
 
 	c.SyncObject.SetVariable(t.ID, t.Value)
-	ch.mapLock.Lock()
-	ch.sockinfoFlushMap[c.SyncObject.UID] = c
-	ch.mapLock.Unlock()
+	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }
 
@@ -239,9 +251,7 @@ func (ch *GameHandler) handleSwitchSync(payload []byte, c *client.ClientSockInfo
 	}
 
 	c.SyncObject.SetSwitch(t.ID, t.Value)
-	ch.mapLock.Lock()
-	ch.sockinfoFlushMap[c.SyncObject.UID] = c
-	ch.mapLock.Unlock()
+	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }
 
@@ -256,9 +266,7 @@ func (ch *GameHandler) handleAnimFrame(payload []byte, c *client.ClientSockInfo)
 	}
 
 	c.SyncObject.SetAnimFrame(t.Frame)
-	ch.mapLock.Lock()
-	ch.sockinfoFlushMap[c.SyncObject.UID] = c
-	ch.mapLock.Unlock()
+	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }
 
@@ -273,9 +281,7 @@ func (ch *GameHandler) handleFacing(payload []byte, c *client.ClientSockInfo) er
 	}
 
 	c.SyncObject.SetFacing(t.Facing)
-	ch.mapLock.Lock()
-	ch.sockinfoFlushMap[c.SyncObject.UID] = c
-	ch.mapLock.Unlock()
+	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }
 
@@ -290,9 +296,7 @@ func (ch *GameHandler) handleTypingStatus(payload []byte, c *client.ClientSockIn
 	}
 
 	c.SyncObject.SetTypingStatus(t.TypingStatus)
-	ch.mapLock.Lock()
-	ch.sockinfoFlushMap[c.SyncObject.UID] = c
-	ch.mapLock.Unlock()
+	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }
 
@@ -307,8 +311,6 @@ func (ch *GameHandler) handleMovementAnimSpeed(payload []byte, c *client.ClientS
 	}
 
 	c.SyncObject.SetMovementAnimationSpeed(t.MovementSpeed)
-	ch.mapLock.Lock()
-	ch.sockinfoFlushMap[c.SyncObject.UID] = c
-	ch.mapLock.Unlock()
+	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }

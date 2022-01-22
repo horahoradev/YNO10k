@@ -1,7 +1,6 @@
 package client
 
 import (
-	"log"
 	"strconv"
 )
 
@@ -19,10 +18,10 @@ type Variable struct {
 }
 
 type Sound struct {
-	Volume  uint16
-	Tempo   uint16
-	Balance uint16
-	Name    string
+	Volume  uint16 `json:"volume"`
+	Tempo   uint16 `json:"tempo"`
+	Balance uint16 `json:"balance"`
+	Name    string `json:"name"`
 }
 
 type Sprite struct {
@@ -69,25 +68,26 @@ type SyncObject struct {
 	Name        string `json:"name,omitempty"`
 	nameChanged bool
 
-	AnimFrame        uint16 `json:"animframe,omitempty"`
+	AnimFrame        *uint16 `json:"animframe,omitempty"`
 	animframeChanged bool
 
 	Switch        *Switch `json:"switch,omitempty"`
 	switchChanged bool
 
-	MovementAnimationSpeed        uint16 `json:"movementAnimationSpeed,omitempty"`
+	MovementAnimationSpeed        *uint16 `json:"movementAnimationSpeed,omitempty"`
 	movementAnimationSpeedChanged bool
 
-	Facing        uint16 `json:"facing,omitempty"`
+	Facing        *uint16 `json:"facing,omitempty"`
 	facingChanged bool
 
-	TypingStatus        uint16 `json:"typingstatus,omitempty"`
+	TypingStatus        *uint16 `json:"typingstatus,omitempty"`
 	typingStatusChanged bool
 }
 
 func NewSyncObject() *SyncObject {
 	serial += 1
-	return &SyncObject{UID: strconv.Itoa(serial), Type: "objectSync", MovementAnimationSpeed: 4}
+	var defaultSpeed uint16 = 4
+	return &SyncObject{UID: strconv.Itoa(serial), Type: "objectSync", MovementAnimationSpeed: &defaultSpeed}
 }
 
 func (so *SyncObject) SetPos(x, y uint16) {
@@ -103,7 +103,6 @@ func (so *SyncObject) SetSprite(id uint16, sheet string) {
 	so.Sprite = &Sprite{ID: id, Sheet: sheet}
 	so.spriteChanged = true
 	// TODO: sprite validation goes here
-	log.Printf("SPRITE CHANGED TO ID %s and SHEET %s", id, sheet)
 }
 
 func (so *SyncObject) SetSound(volume uint16, tempo uint16, balance uint16, name string) {
@@ -122,8 +121,8 @@ func (so *SyncObject) SetSwitch(id, value uint32) {
 }
 
 func (so *SyncObject) SetAnimFrame(frame uint16) {
+	so.AnimFrame = &frame
 	so.animframeChanged = true
-	so.AnimFrame = frame
 }
 
 func (so *SyncObject) SetName(name string) {
@@ -133,17 +132,17 @@ func (so *SyncObject) SetName(name string) {
 
 func (so *SyncObject) SetMovementAnimationSpeed(animationSpeed uint16) {
 	so.movementAnimationSpeedChanged = true
-	so.MovementAnimationSpeed = animationSpeed
+	so.MovementAnimationSpeed = &animationSpeed
 }
 
 func (so *SyncObject) SetFacing(facing uint16) {
-	so.Facing = facing
+	so.Facing = &facing
 	so.facingChanged = true
 }
 
 func (so *SyncObject) SetTypingStatus(typingStatus uint16) {
 	so.typingStatusChanged = true
-	so.TypingStatus = typingStatus
+	so.TypingStatus = &typingStatus
 }
 
 func (so *SyncObject) SetVariable(id, value uint32) {
