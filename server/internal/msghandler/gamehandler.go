@@ -106,35 +106,52 @@ func (ch *GameHandler) flushWorker() {
 		defer timer.Stop()
 
 		for true {
+			// This simply ensures that the event loop doesn't occur more than 60 hz
+			// It isn't a 1/60 second sleep
 			<-timer.C
 
-			// Swap the maps, shouldn't need to lock because we're just swapping the references
-			activeMap := ch.activeSockInfoFlushMap
-			ch.activeSockInfoFlushMap = ch.inactiveSockInfoFlushMap
-			ch.inactiveSockInfoFlushMap = activeMap
-			activeMap = ch.activeSockInfoFlushMap
+			// Inactive map (which was being written to for the previous cycle) becomes active
+			ch.swapActiveAndInactiveMaps()
 
+			// Ensure that all clients gamestate is flushed before moving to next loop,
+			// which prevents interleaving of client gamestate broadcasts
+			// (which would lead to state issues)
 			wg := &sync.WaitGroup{}
+			wg.Add(len(ch.activeSockInfoFlushMap))
+
 			ch.activeRWLock.RLock()
-			wg.Add(len(activeMap))
-			for _, si := range activeMap {
-				go func(wg *sync.WaitGroup) {
-					defer wg.Done()
-					flushedSO := si.SyncObject.GetFlushedChanges()
-					err := ch.pubsubManager.Broadcast(flushedSO, si, false)
-					if err != nil {
-						log.Errorf("Received error when broadcasting SO: %s", err)
-					}
-					// Can lead to state problems if send fails, TODO
-				}(wg)
+			for _, si := range ch.activeSockInfoFlushMap {
+				ch.flushSocketInfo(wg, si)
 			}
+
 			wg.Wait()
-			ch.activeRWLock.RUnlock()
+			ch.activeRWLock.RUnlock() // Can only unlock after all workers have returned
 
 			// Just reassign and let GC take care of it
 			ch.activeSockInfoFlushMap = make(map[string]*client.ClientSockInfo, len(ch.activeSockInfoFlushMap))
 		}
 	}()
+}
+
+func (ch *GameHandler) swapActiveAndInactiveMaps() {
+	// Need to ensure that the inactive map is NOT being written to before we're done swapping
+	ch.inactiveRWLock.Lock()
+	oldActiveMap := ch.activeSockInfoFlushMap
+	ch.activeSockInfoFlushMap = ch.inactiveSockInfoFlushMap
+	ch.inactiveSockInfoFlushMap = oldActiveMap
+	ch.inactiveRWLock.Unlock()
+}
+
+func (ch *GameHandler) flushSocketInfo(wg *sync.WaitGroup, si *client.ClientSockInfo) {
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
+		flushedSO := si.SyncObject.GetFlushedChanges()
+		err := ch.pubsubManager.Broadcast(flushedSO, si, false)
+		if err != nil {
+			log.Errorf("Received error when broadcasting SO: %s", err)
+		}
+		// Can lead to state problems if send fails, TODO
+	}(wg)
 }
 
 func (ch *GameHandler) handleDisconnect(payload []byte, s *client.ClientSockInfo) error {
