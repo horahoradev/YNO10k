@@ -116,6 +116,7 @@ func (so *SyncObject) SetWeather(t, strength uint16) {
 }
 
 func (so *SyncObject) SetSwitch(id, value uint32) {
+	println("Set switch")
 	so.switchChanged = true
 	so.Switch = &Switch{ID: id, Value: value}
 }

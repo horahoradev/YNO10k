@@ -102,7 +102,7 @@ func (ch *GameHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 
 func (ch *GameHandler) flushWorker() {
 	go func() {
-		timer := time.NewTicker(time.Second / 300)
+		timer := time.NewTicker(time.Second / 60)
 		defer timer.Stop()
 
 		for true {
@@ -128,8 +128,8 @@ func (ch *GameHandler) flushWorker() {
 					// Can lead to state problems if send fails, TODO
 				}(wg)
 			}
-			ch.activeRWLock.RUnlock()
 			wg.Wait()
+			ch.activeRWLock.RUnlock()
 
 			// Just reassign and let GC take care of it
 			ch.activeSockInfoFlushMap = make(map[string]*client.ClientSockInfo, len(ch.activeSockInfoFlushMap))
@@ -241,6 +241,7 @@ func (ch *GameHandler) handleVariable(payload []byte, c *client.ClientSockInfo) 
 }
 
 func (ch *GameHandler) handleSwitchSync(payload []byte, c *client.ClientSockInfo) error {
+	log.Print("SWITCHING")
 	t := clientmessages.SwitchSync{}
 	matched, err := protocol.Marshal(payload, &t, true)
 	switch {

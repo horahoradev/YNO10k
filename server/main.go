@@ -149,10 +149,10 @@ func (ms messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gne
 func (ms messageServer) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 	log.Errorf("Closing connection, err: %s. State: %s. ", err)
 	// Send a disconnect broadcast LOL
-	// err1 := ms.serviceMux.HandleMessage([]byte("DC"), &gnetWrapper{Conn: c}, nil)
-	// if err1 != nil {
-	// 	log.Errorf("Failed to handle disconnect message. Err: %s", err)
-	// }
+	err1 := ms.serviceMux.HandleMessage([]byte("DC"), &gnetWrapper{Conn: c}, nil)
+	if err1 != nil {
+		log.Errorf("Failed to handle disconnect message. Err: %s", err)
+	}
 	return
 }
 
