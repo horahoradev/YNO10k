@@ -8,7 +8,9 @@ import (
 
 	"github.com/horahoradev/YNO10k/internal/client"
 	"github.com/horahoradev/YNO10k/internal/clientmessages"
+	ynmetrics "github.com/horahoradev/YNO10k/internal/metrics"
 	"github.com/horahoradev/YNO10k/internal/protocol"
+
 	"github.com/horahoradev/YNO10k/internal/servermessages"
 	"github.com/panjf2000/gnet"
 	log "github.com/sirupsen/logrus"
@@ -97,7 +99,6 @@ func (ch *GameHandler) muxMessage(payload []byte, c gnet.Conn, s *client.ClientS
 	default:
 		return fmt.Errorf("Received unknown message %s", payload[0])
 	}
-
 }
 
 func (ch *GameHandler) flushWorker() {
@@ -105,7 +106,9 @@ func (ch *GameHandler) flushWorker() {
 		timer := time.NewTicker(time.Second / 60)
 		defer timer.Stop()
 
+		loopG := ynmetrics.ConcreteGauge("yno10k.game_handler_flush_latency_ms")
 		for true {
+			start := time.Now()
 			// This simply ensures that the event loop doesn't occur more than 60 hz
 			// It isn't a 1/60 second sleep
 			<-timer.C
@@ -127,6 +130,9 @@ func (ch *GameHandler) flushWorker() {
 			wg.Wait()
 			ch.activeRWLock.RUnlock() // Can only unlock after all workers have returned
 
+			end := time.Since(start)
+			loopG.Set(float64(end.Milliseconds()))
+
 			// Just reassign and let GC take care of it
 			ch.activeSockInfoFlushMap = make(map[string]*client.ClientSockInfo, len(ch.activeSockInfoFlushMap))
 		}
@@ -145,12 +151,17 @@ func (ch *GameHandler) swapActiveAndInactiveMaps() {
 func (ch *GameHandler) flushSocketInfo(wg *sync.WaitGroup, si *client.ClientSockInfo) {
 	go func(wg *sync.WaitGroup) {
 		defer wg.Done()
+		g := ynmetrics.ConcreteGauge("yno10k.flush_duration_ms")
+
+		start := time.Now()
 		flushedSO := si.SyncObject.GetFlushedChanges()
 		err := ch.pubsubManager.Broadcast(flushedSO, si, false)
 		if err != nil {
 			log.Errorf("Received error when broadcasting SO: %s", err)
 		}
 		// Can lead to state problems if send fails, TODO
+		duration := time.Since(start)
+		g.Set(float64(duration.Milliseconds()))
 	}(wg)
 }
 

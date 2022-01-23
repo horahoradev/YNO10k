@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/horahoradev/YNO10k/internal/client"
+	ynmetrics "github.com/horahoradev/YNO10k/internal/metrics"
 	"github.com/horahoradev/YNO10k/internal/msghandler"
 	"github.com/panjf2000/gnet"
 	"github.com/panjf2000/gnet/pkg/pool/goroutine"
@@ -164,6 +166,8 @@ func main() {
 		http.Handle("/", http.FileServer(http.Dir("public/")))
 		log.Fatal(http.ListenAndServe("0.0.0.0:8085", nil))
 	}()
+
+	ynmetrics.StartExporter(context.Background())
 
 	mServ := newMessageServer(p)
 	log.Print("Listening on 443")
