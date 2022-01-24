@@ -2,8 +2,9 @@ package msghandler
 
 import (
 	"errors"
-	"net"
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/horahoradev/YNO10k/internal/client"
 	"github.com/panjf2000/gnet"
@@ -17,7 +18,7 @@ type ServiceMux struct {
 	gh          Handler
 	ch          Handler
 	lh          Handler
-	SyncChanMap map[net.Addr]chan struct{}
+	SyncChanMap map[string]chan struct{}
 	m           *sync.Mutex
 }
 
@@ -27,19 +28,22 @@ func NewServiceMux(gh, ch, lh Handler, cm client.PubSubManager) ServiceMux {
 		gh:          gh,
 		ch:          ch,
 		lh:          lh,
-		SyncChanMap: make(map[net.Addr]chan struct{}),
+		SyncChanMap: make(map[string]chan struct{}),
 		m:           &sync.Mutex{},
 	}
 }
 
-func (sm ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *client.ClientSockInfo) error {
+func (sm *ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *client.ClientSockInfo) error {
 	log.Debug("Handling service message")
 
+	cAddr := c.RemoteAddr().String()
+
 	sm.m.Lock()
-	syncChan, ok := sm.SyncChanMap[c.RemoteAddr()]
+	// What in the fuck
+	syncChan, ok := sm.SyncChanMap[cAddr]
 	if !ok {
 		syncChan = make(chan struct{})
-		sm.SyncChanMap[c.RemoteAddr()] = syncChan
+		sm.SyncChanMap[cAddr] = syncChan
 	}
 	sm.m.Unlock()
 
@@ -52,19 +56,28 @@ func (sm ServiceMux) HandleMessage(clientPayload []byte, c gnet.Conn, cinfo *cli
 			return nil
 		}
 
+		log.Print("Subscribing...")
 		// This is the servicename packet, use it to initialize the client info
 		cInfo, err := sm.cm.SubscribeClientToRoom(string(clientPayload), c)
 		if err != nil {
 			log.Errorf("Failed to add client for room. Err: %s", err)
 			return err
 		}
+		log.Debugf("Subscribed client to room %s", string(clientPayload))
 		// Store the client info with the connection
 		c.SetContext(cInfo)
 		close(syncChan)
 		return nil
 
 	default:
-		<-syncChan
+		select {
+		case <-time.After(3 * time.Second):
+			c.Close()
+			return fmt.Errorf("timed out while waiting to set context")
+		case <-syncChan:
+			// This is fine, proceed
+		}
+
 		clientInfo := getClientSockInfo(c)
 		if clientInfo == nil {
 			return errors.New("Clientinfo nil in message handler main code path")

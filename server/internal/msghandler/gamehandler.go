@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-kit/kit/metrics"
 	"github.com/horahoradev/YNO10k/internal/client"
 	"github.com/horahoradev/YNO10k/internal/clientmessages"
 	ynmetrics "github.com/horahoradev/YNO10k/internal/metrics"
@@ -38,6 +39,11 @@ type GameHandler struct {
 	inactiveSockInfoFlushMap map[string]*client.ClientSockInfo
 	activeRWLock             *sync.RWMutex
 	inactiveRWLock           *sync.RWMutex
+
+	// Metrics
+	spriteCounter metrics.Counter
+	moveCounter   metrics.Counter
+	soundCounter  metrics.Counter
 }
 
 func NewGameHandler(ps client.PubSubManager) *GameHandler {
@@ -48,6 +54,9 @@ func NewGameHandler(ps client.PubSubManager) *GameHandler {
 		inactiveSockInfoFlushMap: make(map[string]*client.ClientSockInfo),
 		inactiveRWLock:           &sync.RWMutex{},
 		activeRWLock:             &sync.RWMutex{},
+		spriteCounter:            ynmetrics.ConcreteCounter("yn10k.set_sprite_count"),
+		moveCounter:              ynmetrics.ConcreteCounter("yn10k.set_pos_count"),
+		soundCounter:             ynmetrics.ConcreteCounter("yn10k.set_sound_count"),
 	}
 	g.flushWorker()
 	return &g
@@ -173,8 +182,9 @@ func (ch *GameHandler) handleDisconnect(payload []byte, s *client.ClientSockInfo
 }
 
 func (ch *GameHandler) handleMovement(payload []byte, c *client.ClientSockInfo) error {
+	ch.moveCounter.Add(1)
 	t := clientmessages.Movement{}
-	matched, err := protocol.Marshal(payload, &t, true)
+	matched, seq, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case err != nil:
 		return err
@@ -182,14 +192,15 @@ func (ch *GameHandler) handleMovement(payload []byte, c *client.ClientSockInfo) 
 		return errors.New("Failed to match in handleMovement")
 	}
 
-	c.SyncObject.SetPos(t.X, t.Y)
+	c.SyncObject.SetPos(t.X, t.Y, seq)
 	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }
 
 func (ch *GameHandler) handleSprite(payload []byte, c *client.ClientSockInfo) error {
+	ch.spriteCounter.Add(1)
 	t := clientmessages.Sprite{}
-	matched, err := protocol.Marshal(payload, &t, true)
+	matched, seq, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case err != nil:
 		return fmt.Errorf("Failed to handleSprite. Err: %s", err)
@@ -197,7 +208,7 @@ func (ch *GameHandler) handleSprite(payload []byte, c *client.ClientSockInfo) er
 		return errors.New("Failed to match in handleSprite")
 	}
 
-	c.SyncObject.SetSprite(t.SpriteID, t.Spritesheet)
+	c.SyncObject.SetSprite(t.SpriteID, t.Spritesheet, seq)
 	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }
@@ -209,8 +220,9 @@ func (ch *GameHandler) scheduleChanges(uid string, c *client.ClientSockInfo) {
 }
 
 func (ch *GameHandler) handleSound(payload []byte, c *client.ClientSockInfo) error {
+	ch.soundCounter.Add(1)
 	t := clientmessages.Sound{}
-	matched, err := protocol.Marshal(payload, &t, true)
+	matched, _, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case err != nil:
 		return err
@@ -225,7 +237,7 @@ func (ch *GameHandler) handleSound(payload []byte, c *client.ClientSockInfo) err
 
 func (ch *GameHandler) handleWeather(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.Weather{}
-	matched, err := protocol.Marshal(payload, &t, true)
+	matched, _, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case !matched:
 		return errors.New("Failed to match in handleWeather")
@@ -240,7 +252,7 @@ func (ch *GameHandler) handleWeather(payload []byte, c *client.ClientSockInfo) e
 
 func (ch *GameHandler) handleName(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.Name{}
-	matched, err := protocol.Marshal(payload, &t, true)
+	matched, _, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case !matched:
 		return errors.New("Failed to match in handleWeather")
@@ -255,7 +267,7 @@ func (ch *GameHandler) handleName(payload []byte, c *client.ClientSockInfo) erro
 
 func (ch *GameHandler) handleVariable(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.Variable{}
-	matched, err := protocol.Marshal(payload, &t, true)
+	matched, _, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case !matched:
 		return errors.New("Failed to match in handleVariable")
@@ -269,9 +281,8 @@ func (ch *GameHandler) handleVariable(payload []byte, c *client.ClientSockInfo) 
 }
 
 func (ch *GameHandler) handleSwitchSync(payload []byte, c *client.ClientSockInfo) error {
-	log.Print("SWITCHING")
 	t := clientmessages.SwitchSync{}
-	matched, err := protocol.Marshal(payload, &t, true)
+	matched, _, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case !matched:
 		return errors.New("Failed to match in handleSwitchSync")
@@ -286,7 +297,7 @@ func (ch *GameHandler) handleSwitchSync(payload []byte, c *client.ClientSockInfo
 
 func (ch *GameHandler) handleAnimFrame(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.AnimFrame{}
-	matched, err := protocol.Marshal(payload, &t, true)
+	matched, seq, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case err != nil:
 		return err
@@ -294,14 +305,14 @@ func (ch *GameHandler) handleAnimFrame(payload []byte, c *client.ClientSockInfo)
 		return errors.New("failed to match in handleAnimFrame")
 	}
 
-	c.SyncObject.SetAnimFrame(t.Frame)
+	c.SyncObject.SetAnimFrame(t.Frame, seq)
 	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }
 
 func (ch *GameHandler) handleFacing(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.Facing{}
-	matched, err := protocol.Marshal(payload, &t, true)
+	matched, _, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case err != nil:
 		return err
@@ -316,7 +327,7 @@ func (ch *GameHandler) handleFacing(payload []byte, c *client.ClientSockInfo) er
 
 func (ch *GameHandler) handleTypingStatus(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.TypingStatus{}
-	matched, err := protocol.Marshal(payload, &t, true)
+	matched, _, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case !matched:
 		return errors.New("Failed to match in handleTypingStatus")
@@ -331,7 +342,7 @@ func (ch *GameHandler) handleTypingStatus(payload []byte, c *client.ClientSockIn
 
 func (ch *GameHandler) handleMovementAnimSpeed(payload []byte, c *client.ClientSockInfo) error {
 	t := clientmessages.MovementAnimationSpeed{}
-	matched, err := protocol.Marshal(payload, &t, true)
+	matched, seq, err := protocol.Marshal(payload, &t, true)
 	switch {
 	case err != nil:
 		return err
@@ -339,7 +350,7 @@ func (ch *GameHandler) handleMovementAnimSpeed(payload []byte, c *client.ClientS
 		return errors.New("Failed to match in handleMovementAnimSpeed")
 	}
 
-	c.SyncObject.SetMovementAnimationSpeed(t.MovementSpeed)
+	c.SyncObject.SetMovementAnimationSpeed(t.MovementSpeed, seq)
 	ch.scheduleChanges(c.SyncObject.UID, c)
 	return nil
 }

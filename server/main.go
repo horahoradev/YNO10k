@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/horahoradev/YNO10k/internal/client"
 	ynmetrics "github.com/horahoradev/YNO10k/internal/metrics"
@@ -57,6 +58,7 @@ type messageServer struct {
 	*gnet.EventServer
 	pool       *goroutine.Pool
 	serviceMux msghandler.Handler
+	m          *sync.Mutex
 }
 
 func newMessageServer(pool *goroutine.Pool) messageServer {
@@ -67,9 +69,10 @@ func newMessageServer(pool *goroutine.Pool) messageServer {
 	gh := msghandler.NewGameHandler(ps)
 	sMux := msghandler.NewServiceMux(gh, ch, lh, ps)
 	return messageServer{
-		serviceMux:  sMux,
+		serviceMux:  &sMux,
 		pool:        pool,
 		EventServer: &gnet.EventServer{},
+		m:           &sync.Mutex{},
 	}
 }
 
@@ -130,24 +133,6 @@ func (ms messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gne
 	return nil, gnet.None
 }
 
-/*
-
-	if si.ClientInfo.IsClosed() {
-		ch.mapLock.Lock()
-		delete(ch.sockinfoFlushMap, key)
-		ch.mapLock.Unlock()
-		//		return {type: "disconnect", uuid: socket.syncObject.uid};
-
-		err := ch.pubsubManager.Broadcast(&servermessages.DisconnectMessage{
-			Type: "disconnect",
-			UUID: si.SyncObject.UID,
-		}, si)
-		if err != nil {
-			log.Errorf("Failed to broadcast disconnect message, continuing...")
-		}
-		continue
-	}
-*/
 func (ms messageServer) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 	log.Errorf("Closing connection, err: %s. State: %s. ", err)
 	// Send a disconnect broadcast LOL
@@ -171,5 +156,5 @@ func main() {
 
 	mServ := newMessageServer(p)
 	log.Print("Listening on 443")
-	log.Fatal(gnet.Serve(mServ, "0.0.0.0:443"))
+	log.Fatal(gnet.Serve(mServ, "0.0.0.0:443", gnet.WithNumEventLoop(1), gnet.WithMulticore(false)))
 }

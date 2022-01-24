@@ -16,13 +16,13 @@ import (
 type ClientPubsubManager struct {
 	// Game name : client info
 	gameClientMap map[string]GameClientInfo
-	lock          *sync.Mutex
+	lock          *sync.RWMutex
 }
 
 func NewClientPubsubManager() *ClientPubsubManager {
 	return &ClientPubsubManager{
 		gameClientMap: make(map[string]GameClientInfo),
-		lock:          &sync.Mutex{},
+		lock:          &sync.RWMutex{},
 	}
 }
 
@@ -56,8 +56,6 @@ func (cm *ClientPubsubManager) GetUsernameForGame(game, room, username string) (
 
 func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gnet.Conn) (*ClientSockInfo, error) {
 	// TODO: cleanup old sock addr in clientRemoteAddrMap
-	cm.lock.Lock()
-	defer cm.lock.Unlock()
 
 	// Split provided servicename into something we can use
 	gameName, roomName, err := SplitServiceName(serviceName)
@@ -71,6 +69,7 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 	}
 
 	// Does the game client manager exist? if not, create
+	cm.lock.Lock()
 	gameServ, ok := cm.gameClientMap[gameName]
 	if !ok {
 		gameServ = GameClientInfo{
@@ -79,6 +78,7 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 
 		cm.gameClientMap[gameName] = gameServ
 	}
+	cm.lock.Unlock()
 
 	// TODO: initialize second map
 
@@ -93,21 +93,39 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 	}
 
 	// Deletion in old room will be handled in an async worker
+	cm.lock.Lock()
 	gameServ.clientRoomRemoteAddrMap[roomName] = append(gameServ.clientRoomRemoteAddrMap[roomName], sockInfo)
+	cm.lock.Unlock()
 
 	if serviceType == Game {
+		cm.lock.RLock()
+		players := gameServ.clientRoomRemoteAddrMap[roomName]
+		cm.lock.RUnlock()
 		// Send client all player room state
-		for _, player := range gameServ.clientRoomRemoteAddrMap[roomName] {
+		for _, player := range players {
 			syncChanges := player.SyncObject.GetAllChanges()
 			syncPayload, err := json.Marshal(&syncChanges)
 			if err != nil {
 				log.Errorf("Could not get initial player state. Err: %s", err)
 			}
 
+			// Send the new client everyone's state
 			err = sockInfo.ClientInfo.SendFromPlayer(syncPayload, player.ClientInfo.GetAddr())
 			if err != nil {
 				log.Errorf("Failed to send initial state from player. Err: %s", err)
 			}
+
+			// Send the client's state to everyone
+			// syncChanges = sockInfo.SyncObject.GetAllChanges()
+			// syncPayload, err = json.Marshal(&syncChanges)
+			// if err != nil {
+			// 	log.Errorf("Could not get initial player state. Err: %s", err)
+			// }
+
+			// err = player.ClientInfo.SendFromPlayer(syncPayload, sockInfo.ClientInfo.GetAddr())
+			// if err != nil {
+			// 	log.Errorf("Failed to send initial state from player. Err: %s", err)
+			// }
 		}
 	}
 
@@ -132,24 +150,26 @@ func SplitServiceName(serviceName string) (gameName, serviceType string, err err
 
 // TODO: refactor here too
 func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo *ClientSockInfo, fromServer bool) error {
-	cm.lock.Lock()
-	defer cm.lock.Unlock()
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 
+	cm.lock.RLock()
 	gameClientInfo, ok := cm.gameClientMap[sockinfo.GameName]
+	cm.lock.RUnlock()
 	if !ok {
 		return fmt.Errorf("Failed to broadcast, could not find game client info for game name %s", sockinfo.GameName)
 	}
 
+	cm.lock.RLock()
 	clients, ok := gameClientInfo.clientRoomRemoteAddrMap[sockinfo.RoomName]
+	cm.lock.RUnlock()
 	if !ok {
 		return fmt.Errorf("Failed to broadcast, could not find client list for room name %s", sockinfo.RoomName)
 	}
 
-	log.Printf("Broadcasting for room %s, clients: %s", sockinfo.RoomName, len(clients))
+	log.Debugf("Broadcasting for room %s, clients: %s", sockinfo.RoomName, len(clients))
 	for _, client := range clients {
 		switch fromServer {
 		case true:

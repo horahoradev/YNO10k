@@ -2,6 +2,7 @@ package client
 
 import (
 	"strconv"
+	"sync"
 )
 
 var serial int = 0
@@ -82,26 +83,50 @@ type SyncObject struct {
 
 	TypingStatus        *uint16 `json:"typingstatus,omitempty"`
 	typingStatusChanged bool
+
+	moveSeq      uint8
+	animframeSeq uint8
+	spriteSeq    uint8
+	animspeedSeq uint8
+
+	// Could use more granular locking but this is ok
+	timeLock *sync.Mutex
+	posLock  *sync.Mutex
 }
 
 func NewSyncObject() *SyncObject {
 	serial += 1
 	var defaultSpeed uint16 = 4
-	return &SyncObject{UID: strconv.Itoa(serial), Type: "objectSync", MovementAnimationSpeed: &defaultSpeed}
+	return &SyncObject{UID: strconv.Itoa(serial),
+		Type:                   "objectSync",
+		MovementAnimationSpeed: &defaultSpeed,
+		timeLock:               &sync.Mutex{},
+		posLock:                &sync.Mutex{},
+	}
 }
 
-func (so *SyncObject) SetPos(x, y uint16) {
-	so.posChanged = true
-	so.Pos = &Position{X: x, Y: y}
+func (so *SyncObject) SetPos(x, y uint16, seqNum uint8) {
+	so.posLock.Lock()
+	defer so.posLock.Unlock()
+	if so.moveSeq < seqNum {
+		so.moveSeq = seqNum
+		so.posChanged = true
+		so.Pos = &Position{X: x, Y: y}
+	}
 }
 
-func (so *SyncObject) SetSprite(id uint16, sheet string) {
+func (so *SyncObject) SetSprite(id uint16, sheet string, seqNum uint8) {
 	// "why do I have to do this?"
 	if id == 0 && sheet == "" {
 		return
 	}
-	so.Sprite = &Sprite{ID: id, Sheet: sheet}
-	so.spriteChanged = true
+	so.timeLock.Lock()
+	defer so.timeLock.Unlock()
+	if so.spriteSeq < seqNum {
+		so.spriteSeq = seqNum
+		so.Sprite = &Sprite{ID: id, Sheet: sheet}
+		so.spriteChanged = true
+	}
 	// TODO: sprite validation goes here
 }
 
@@ -116,14 +141,18 @@ func (so *SyncObject) SetWeather(t, strength uint16) {
 }
 
 func (so *SyncObject) SetSwitch(id, value uint32) {
-	println("Set switch")
 	so.switchChanged = true
 	so.Switch = &Switch{ID: id, Value: value}
 }
 
-func (so *SyncObject) SetAnimFrame(frame uint16) {
-	so.AnimFrame = &frame
-	so.animframeChanged = true
+func (so *SyncObject) SetAnimFrame(frame uint16, seqNum uint8) {
+	so.timeLock.Lock()
+	defer so.timeLock.Unlock()
+	if so.animframeSeq < seqNum {
+		so.animframeSeq = seqNum
+		so.AnimFrame = &frame
+		so.animframeChanged = true
+	}
 }
 
 func (so *SyncObject) SetName(name string) {
@@ -131,9 +160,14 @@ func (so *SyncObject) SetName(name string) {
 	so.Name = name
 }
 
-func (so *SyncObject) SetMovementAnimationSpeed(animationSpeed uint16) {
-	so.movementAnimationSpeedChanged = true
-	so.MovementAnimationSpeed = &animationSpeed
+func (so *SyncObject) SetMovementAnimationSpeed(animationSpeed uint16, seqNum uint8) {
+	so.timeLock.Lock()
+	defer so.timeLock.Unlock()
+	if so.animspeedSeq < seqNum {
+		so.animspeedSeq = seqNum
+		so.MovementAnimationSpeed = &animationSpeed
+		so.movementAnimationSpeedChanged = true
+	}
 }
 
 func (so *SyncObject) SetFacing(facing uint16) {
