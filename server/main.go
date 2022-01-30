@@ -108,25 +108,33 @@ func (ms messageServer) React(inpframe []byte, c gnet.Conn) (out []byte, action 
 	// This is a blocking thread pool, we don't want to loop infinitely and consume all workers
 	// It's assumed that all messages will arrive in a single tcp packet, but that's required by the websocket protocol
 	err1 := ms.pool.Submit(func() {
-		wsFrame, err := ws.ReadFrame(asyncWS)
-		if err != nil {
-			log.Errorf("Failed to read frame. Err: %s", err)
-			return
-		}
+		for true {
+			wsFrame, err := ws.ReadFrame(asyncWS)
+			if err != nil {
+				log.Errorf("Failed to read frame. Err: %s", err)
+				return
+			}
 
-		if wsFrame.Header.Masked {
-			wsFrame = ws.UnmaskFrame(wsFrame)
-		}
+			if wsFrame.Header.Masked {
+				wsFrame = ws.UnmaskFrame(wsFrame)
+			}
 
-		if wsFrame.Header.OpCode == ws.OpClose {
-			log.Print("Received close opcode, closing connection")
-			c.Close()
-			return
-		}
+			if wsFrame.Header.OpCode == ws.OpClose {
+				log.Print("Received close opcode, closing connection")
+				c.Close()
+				return
+			}
 
-		err = ms.serviceMux.HandleMessage(wsFrame.Payload, &gnetWrapper{Conn: c}, nil)
-		if err != nil {
-			log.Errorf("Could not handle client message. Err: %s", err)
+			err = ms.serviceMux.HandleMessage(wsFrame.Payload, &gnetWrapper{Conn: c}, nil)
+			if err != nil {
+				log.Errorf("Could not handle client message. Err: %s", err)
+			}
+
+			// We could've received multiple messages
+			if len(wsFrame.Payload) == len(frame) {
+				return
+			}
+			frame = frame[len(wsFrame.Payload):]
 		}
 	})
 	if err1 != nil {
