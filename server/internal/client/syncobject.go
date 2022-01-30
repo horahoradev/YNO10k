@@ -90,8 +90,7 @@ type SyncObject struct {
 	animspeedSeq uint8
 
 	// Could use more granular locking but this is ok
-	timeLock *sync.Mutex
-	posLock  *sync.Mutex
+	flushLock *sync.Mutex
 }
 
 func NewSyncObject() *SyncObject {
@@ -100,15 +99,14 @@ func NewSyncObject() *SyncObject {
 	return &SyncObject{UID: strconv.Itoa(serial),
 		Type:                   "objectSync",
 		MovementAnimationSpeed: &defaultSpeed,
-		timeLock:               &sync.Mutex{},
-		posLock:                &sync.Mutex{},
+		flushLock:              &sync.Mutex{},
 	}
 }
 
 func (so *SyncObject) SetPos(x, y uint16, seqNum uint8) {
-	so.posLock.Lock()
-	defer so.posLock.Unlock()
-	if so.moveSeq < seqNum {
+	so.flushLock.Lock()
+	defer so.flushLock.Unlock()
+	if isLatestSeqNumber(seqNum, so.moveSeq) {
 		so.moveSeq = seqNum
 		so.posChanged = true
 		so.Pos = &Position{X: x, Y: y}
@@ -120,9 +118,9 @@ func (so *SyncObject) SetSprite(id uint16, sheet string, seqNum uint8) {
 	if id == 0 && sheet == "" {
 		return
 	}
-	so.timeLock.Lock()
-	defer so.timeLock.Unlock()
-	if so.spriteSeq < seqNum {
+	so.flushLock.Lock()
+	defer so.flushLock.Unlock()
+	if isLatestSeqNumber(seqNum, so.spriteSeq) {
 		so.spriteSeq = seqNum
 		so.Sprite = &Sprite{ID: id, Sheet: sheet}
 		so.spriteChanged = true
@@ -131,24 +129,31 @@ func (so *SyncObject) SetSprite(id uint16, sheet string, seqNum uint8) {
 }
 
 func (so *SyncObject) SetSound(volume uint16, tempo uint16, balance uint16, name string) {
+	so.flushLock.Lock()
+	defer so.flushLock.Unlock()
 	so.soundChanged = true
 	so.Sound = &Sound{Volume: volume, Tempo: tempo, Balance: balance, Name: name}
 }
 
 func (so *SyncObject) SetWeather(t, strength uint16) {
+	so.flushLock.Lock()
+	defer so.flushLock.Unlock()
+
 	so.weatherChanged = true
 	so.Weather = &Weather{Type: t, Strength: strength}
 }
 
 func (so *SyncObject) SetSwitch(id, value uint32) {
+	so.flushLock.Lock()
+	defer so.flushLock.Unlock()
 	so.switchChanged = true
 	so.Switch = &Switch{ID: id, Value: value}
 }
 
 func (so *SyncObject) SetAnimFrame(frame uint16, seqNum uint8) {
-	so.timeLock.Lock()
-	defer so.timeLock.Unlock()
-	if so.animframeSeq < seqNum {
+	so.flushLock.Lock()
+	defer so.flushLock.Unlock()
+	if isLatestSeqNumber(seqNum, so.animframeSeq) {
 		so.animframeSeq = seqNum
 		so.AnimFrame = &frame
 		so.animframeChanged = true
@@ -161,9 +166,10 @@ func (so *SyncObject) SetName(name string) {
 }
 
 func (so *SyncObject) SetMovementAnimationSpeed(animationSpeed uint16, seqNum uint8) {
-	so.timeLock.Lock()
-	defer so.timeLock.Unlock()
-	if so.animspeedSeq < seqNum {
+	so.flushLock.Lock()
+	defer so.flushLock.Unlock()
+
+	if isLatestSeqNumber(seqNum, so.animspeedSeq) {
 		so.animspeedSeq = seqNum
 		so.MovementAnimationSpeed = &animationSpeed
 		so.movementAnimationSpeedChanged = true
@@ -176,6 +182,9 @@ func (so *SyncObject) SetFacing(facing uint16) {
 }
 
 func (so *SyncObject) SetTypingStatus(typingStatus uint16) {
+	so.flushLock.Lock()
+	defer so.flushLock.Unlock()
+
 	so.typingStatusChanged = true
 	so.TypingStatus = &typingStatus
 }
@@ -186,7 +195,8 @@ func (so *SyncObject) SetVariable(id, value uint32) {
 }
 
 func (so *SyncObject) GetAllChanges() interface{} {
-	return so
+	ret := *so
+	return &ret
 }
 
 func (so *SyncObject) clearChanges() {
@@ -205,6 +215,9 @@ func (so *SyncObject) clearChanges() {
 
 // So this is horrific BUT idk what to do about it lol
 func (so *SyncObject) GetFlushedChanges() interface{} {
+	so.flushLock.Lock()
+	defer so.flushLock.Unlock()
+
 	s := SyncObject{UID: so.UID, Type: so.Type}
 
 	if so.posChanged {
@@ -251,7 +264,9 @@ func (so *SyncObject) GetFlushedChanges() interface{} {
 		s.AnimFrame = so.AnimFrame
 	}
 
-	so.clearChanges()
-
 	return s
+}
+
+func isLatestSeqNumber(a, b uint8) bool {
+	return b == 0 || a-b < b-a
 }

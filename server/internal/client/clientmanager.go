@@ -101,32 +101,41 @@ func (cm *ClientPubsubManager) SubscribeClientToRoom(serviceName string, conn gn
 		cm.lock.RLock()
 		players := gameServ.clientRoomRemoteAddrMap[roomName]
 		cm.lock.RUnlock()
+
+		wg := sync.WaitGroup{}
+		wg.Add(len(players))
+
 		// Send client all player room state
 		for _, player := range players {
-			syncChanges := player.SyncObject.GetAllChanges()
-			syncPayload, err := json.Marshal(&syncChanges)
-			if err != nil {
-				log.Errorf("Could not get initial player state. Err: %s", err)
-			}
+			go func(wg *sync.WaitGroup, player *ClientSockInfo) {
+				defer wg.Done()
 
-			// Send the new client everyone's state
-			err = sockInfo.ClientInfo.SendFromPlayer(syncPayload, player.ClientInfo.GetAddr())
-			if err != nil {
-				log.Errorf("Failed to send initial state from player. Err: %s", err)
-			}
+				syncChanges := player.SyncObject.GetAllChanges()
+				syncPayload, err := json.Marshal(&syncChanges)
+				if err != nil {
+					log.Errorf("Could not get initial player state. Err: %s", err)
+				}
 
-			// Send the client's state to everyone
-			// syncChanges = sockInfo.SyncObject.GetAllChanges()
-			// syncPayload, err = json.Marshal(&syncChanges)
-			// if err != nil {
-			// 	log.Errorf("Could not get initial player state. Err: %s", err)
-			// }
+				// Send the new client everyone's state
+				err = sockInfo.ClientInfo.SendFromPlayer(syncPayload, player.ClientInfo.GetAddr())
+				if err != nil {
+					log.Errorf("Failed to send initial state from player. Err: %s", err)
+				}
 
-			// err = player.ClientInfo.SendFromPlayer(syncPayload, sockInfo.ClientInfo.GetAddr())
-			// if err != nil {
-			// 	log.Errorf("Failed to send initial state from player. Err: %s", err)
-			// }
+				// Send the client's state to everyone
+				// syncChanges = sockInfo.SyncObject.GetAllChanges()
+				// syncPayload, err = json.Marshal(&syncChanges)
+				// if err != nil {
+				// 	log.Errorf("Could not get initial player state. Err: %s", err)
+				// }
+
+				// err = player.ClientInfo.SendFromPlayer(syncPayload, sockInfo.ClientInfo.GetAddr())
+				// if err != nil {
+				// 	log.Errorf("Failed to send initial state from player. Err: %s", err)
+				// }
+			}(&wg, player)
 		}
+		wg.Wait()
 	}
 
 	return sockInfo, nil
@@ -175,7 +184,8 @@ func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo *ClientSo
 		case true:
 			err = client.ClientInfo.SendFromServer(payloadBytes)
 			if err != nil {
-				log.Errorf("Failed to send to client from server. Err: %s. Continuing...", err)
+				// TODO
+				// log.Errorf("Failed to send to client from server. Err: %s. Continuing...", err)
 			}
 		case false:
 			c := sockinfo.ClientInfo
@@ -184,7 +194,8 @@ func (cm *ClientPubsubManager) Broadcast(payload interface{}, sockinfo *ClientSo
 			}
 			err = client.ClientInfo.SendFromPlayer(payloadBytes, c.GetAddr())
 			if err != nil {
-				log.Errorf("Failed to send to client. Err: %s. Continuing...", err)
+				// TODO
+				// log.Errorf("Failed to send to client. Err: %s. Continuing...", err)
 			}
 		}
 	}

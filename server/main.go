@@ -87,9 +87,12 @@ func (g *gnetWrapper) AsyncWrite(buf []byte) error {
 }
 
 // Shouldn't be called until after we upgrade the websocket, so this is safe
-func (ms messageServer) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
+func (ms messageServer) React(inpframe []byte, c gnet.Conn) (out []byte, action gnet.Action) {
+	log.Debugf("Reacting to new packet: %s", string(inpframe))
+	frame := make([]byte, len(inpframe))
+	copy(frame, inpframe)
+
 	asyncWS := newAsyncWS(c, bytes.NewReader(frame))
-	log.Debugf("Reacting to new packet: %s", string(frame))
 
 	// OK this is super lame but whatever
 	if strings.Contains(string(frame), "Upgrade") {
@@ -156,5 +159,5 @@ func main() {
 
 	mServ := newMessageServer(p)
 	log.Print("Listening on 443")
-	log.Fatal(gnet.Serve(mServ, "0.0.0.0:443", gnet.WithNumEventLoop(1), gnet.WithMulticore(false)))
+	log.Fatal(gnet.Serve(mServ, "0.0.0.0:443", gnet.WithMulticore(true)))
 }
